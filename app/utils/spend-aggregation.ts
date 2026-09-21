@@ -18,6 +18,14 @@ export function shiftDate(base: string, days: number): string {
   return toDateString(addDays(parseISO(base), days))
 }
 
+/** Inclusive day count between YYYY-MM-DD bounds (min 1). */
+export function daysInRange(from: string, to: string): number {
+  const start = parseISO(from)
+  const end = parseISO(to)
+  const diff = Math.round((end.getTime() - start.getTime()) / 86400000) + 1
+  return Math.max(1, diff)
+}
+
 export function enumerateDates(from: string, to: string): string[] {
   const dates: string[] = []
   let cursor = parseISO(from)

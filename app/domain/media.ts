@@ -13,6 +13,7 @@ export interface PlatformAssetType {
   mediaId: string
   code: string
   name: string
+  status: EntityStatus
 }
 
 export interface PlatformAsset {

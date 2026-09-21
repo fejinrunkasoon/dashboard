@@ -1,28 +1,208 @@
 <script setup lang="ts">
-import type { Product } from '~/types'
+import type { TableColumn } from '@nuxt/ui'
+import type { Customer, ProductOwnership } from '~/domain'
+import type { ProductListItem } from '~/services'
+import { productService } from '~/services'
 
-const { data: products } = await useFetch<Product[]>('/api/products')
+useSeoMeta({ title: '产品与客户' })
 
-const formatCurrency = (value: number) => `$${value.toLocaleString()}`
+const toast = useToast()
 
-const internalProducts = computed(() =>
-  (products.value ?? []).filter(p => p.type === 'internal')
-)
+const segment = ref<'INTERNAL' | 'EXTERNAL' | 'CUSTOMERS'>('INTERNAL')
+const products = ref<ProductListItem[]>([])
+const customers = ref<Customer[]>([])
+const pending = ref(true)
+const saving = ref(false)
 
-const externalProducts = computed(() =>
-  (products.value ?? []).filter(p => p.type === 'external')
-)
+const showProductModal = ref(false)
+const editingProduct = ref<ProductListItem | null>(null)
+const showCustomerModal = ref(false)
+const editingCustomer = ref<Customer | null>(null)
 
-const totalInternalConsumed = computed(() =>
-  internalProducts.value.reduce((sum, p) => sum + p.consumed, 0)
-)
+const segmentItems = [
+  { label: '自家产品', value: 'INTERNAL' },
+  { label: '外接产品', value: 'EXTERNAL' },
+  { label: '外接客户', value: 'CUSTOMERS' }
+]
 
-const totalExternalConsumed = computed(() =>
-  externalProducts.value.reduce((sum, p) => sum + p.consumed, 0)
-)
+async function refresh() {
+  pending.value = true
+  try {
+    const [productRows, customerRows] = await Promise.all([
+      productService.getProductList(),
+      productService.getCustomers()
+    ])
+    products.value = productRows
+    customers.value = customerRows
+  } finally {
+    pending.value = false
+  }
+}
 
-const totalConsumed = computed(() =>
-  totalInternalConsumed.value + totalExternalConsumed.value
+await refresh()
+
+const filteredProducts = computed(() => {
+  if (segment.value === 'CUSTOMERS') return []
+  return products.value.filter(p => p.ownershipType === segment.value)
+})
+
+const productColumns: TableColumn<ProductListItem>[] = [
+  { accessorKey: 'name', header: '名称' },
+  { accessorKey: 'code', header: 'Code' },
+  { id: 'customer', header: '客户' },
+  { id: 'bound', header: '绑定账户' },
+  { accessorKey: 'status', header: '状态' },
+  { id: 'actions', header: '操作' }
+]
+
+const customerColumns: TableColumn<Customer>[] = [
+  { accessorKey: 'name', header: '名称' },
+  { accessorKey: 'code', header: 'Code' },
+  { id: 'productCount', header: '产品数' },
+  { accessorKey: 'status', header: '状态' },
+  { id: 'actions', header: '操作' }
+]
+
+function productCountForCustomer(customerId: string) {
+  return products.value.filter(p => p.customerId === customerId).length
+}
+
+function statusColor(status: string) {
+  return status === 'ACTIVE' ? 'success' : 'neutral'
+}
+
+function openCreateProduct() {
+  editingProduct.value = null
+  if (segment.value === 'CUSTOMERS') segment.value = 'EXTERNAL'
+  showProductModal.value = true
+}
+
+function openEditProduct(product: ProductListItem) {
+  editingProduct.value = product
+  showProductModal.value = true
+}
+
+function openCreateCustomer() {
+  editingCustomer.value = null
+  showCustomerModal.value = true
+}
+
+function openEditCustomer(customer: Customer) {
+  editingCustomer.value = customer
+  showCustomerModal.value = true
+}
+
+async function onSaveProduct(payload: {
+  code: string
+  name: string
+  ownershipType: ProductOwnership
+  customerId?: string | null
+  note?: string | null
+}) {
+  if (saving.value) return
+  saving.value = true
+  try {
+    if (editingProduct.value) {
+      await productService.updateProduct(editingProduct.value.id, {
+        name: payload.name,
+        note: payload.note,
+        ...(payload.ownershipType === 'EXTERNAL'
+          ? { customerId: payload.customerId }
+          : {})
+      })
+      toast.add({ title: '已更新产品', icon: 'i-lucide-check', color: 'success' })
+    } else {
+      await productService.createProduct(payload)
+      toast.add({ title: '已创建产品', icon: 'i-lucide-check', color: 'success' })
+      segment.value = payload.ownershipType
+    }
+    showProductModal.value = false
+    await refresh()
+  } catch (error) {
+    toast.add({
+      title: '保存失败',
+      description: error instanceof Error ? error.message : '未知错误',
+      icon: 'i-lucide-alert-circle',
+      color: 'error'
+    })
+  } finally {
+    saving.value = false
+  }
+}
+
+async function onToggleProductStatus(product: ProductListItem) {
+  const next = product.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE'
+  try {
+    await productService.setProductStatus(product.id, next)
+    toast.add({
+      title: next === 'ACTIVE' ? '已启用产品' : '已停用产品',
+      description: `${product.name} → ${next}`,
+      icon: 'i-lucide-check',
+      color: 'success'
+    })
+    await refresh()
+  } catch (error) {
+    toast.add({
+      title: '状态更新失败',
+      description: error instanceof Error ? error.message : '未知错误',
+      icon: 'i-lucide-alert-circle',
+      color: 'error'
+    })
+  }
+}
+
+async function onSaveCustomer(payload: { code: string, name: string, note?: string | null }) {
+  if (saving.value) return
+  saving.value = true
+  try {
+    if (editingCustomer.value) {
+      await productService.updateCustomer(editingCustomer.value.id, {
+        name: payload.name,
+        note: payload.note
+      })
+      toast.add({ title: '已更新客户', icon: 'i-lucide-check', color: 'success' })
+    } else {
+      await productService.createCustomer(payload)
+      toast.add({ title: '已创建客户', icon: 'i-lucide-check', color: 'success' })
+      segment.value = 'CUSTOMERS'
+    }
+    showCustomerModal.value = false
+    await refresh()
+  } catch (error) {
+    toast.add({
+      title: '保存失败',
+      description: error instanceof Error ? error.message : '未知错误',
+      icon: 'i-lucide-alert-circle',
+      color: 'error'
+    })
+  } finally {
+    saving.value = false
+  }
+}
+
+async function onToggleCustomerStatus(customer: Customer) {
+  const next = customer.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE'
+  try {
+    await productService.setCustomerStatus(customer.id, next)
+    toast.add({
+      title: next === 'ACTIVE' ? '已启用客户' : '已停用客户',
+      description: `${customer.name} → ${next}`,
+      icon: 'i-lucide-check',
+      color: 'success'
+    })
+    await refresh()
+  } catch (error) {
+    toast.add({
+      title: '状态更新失败',
+      description: error instanceof Error ? error.message : '未知错误',
+      icon: 'i-lucide-alert-circle',
+      color: 'error'
+    })
+  }
+}
+
+const defaultOwnership = computed<ProductOwnership>(() =>
+  segment.value === 'INTERNAL' ? 'INTERNAL' : 'EXTERNAL'
 )
 </script>
 
@@ -30,130 +210,141 @@ const totalConsumed = computed(() =>
   <div class="space-y-6">
     <UPageCard
       title="产品与客户"
-      description="管理自家产品和外接客户产品，查看绑定账户数和消耗情况。"
+      description="管理自家产品与外接客户主数据。绑定账户数为只读统计；消耗请在运营总览 / 账户分析查看。"
       variant="naked"
       orientation="horizontal"
-      class="mb-4"
+      class="mb-2"
     >
-      <UButton
-        label="新增产品"
-        icon="i-lucide-plus"
-        color="neutral"
-        class="w-fit lg:ms-auto"
-      />
+      <div class="flex flex-wrap gap-2 w-fit lg:ms-auto">
+        <UButton
+          label="新增客户"
+          icon="i-lucide-building-2"
+          color="neutral"
+          variant="outline"
+          @click="openCreateCustomer"
+        />
+        <UButton
+          label="新增产品"
+          icon="i-lucide-plus"
+          color="neutral"
+          @click="openCreateProduct"
+        />
+      </div>
     </UPageCard>
 
-    <div class="grid gap-4 sm:grid-cols-2">
-      <UCard>
-        <template #header>
-          <div class="flex items-center justify-between px-4 py-3">
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-home" class="text-primary size-5" />
-              <span class="font-semibold text-highlighted">自家产品</span>
-            </div>
-            <UBadge :label="`${internalProducts.length} 个`" variant="subtle" color="primary" size="xs" />
-          </div>
-        </template>
+    <UTabs v-model="segment" :items="segmentItems" class="w-full" :content="false" />
 
-        <div class="space-y-3">
-          <div
-            v-for="product in internalProducts"
-            :key="product.id"
-            class="flex items-center justify-between py-2 border-b border-default last:border-b-0"
-          >
-            <div>
-              <p class="text-sm font-medium text-highlighted">{{ product.name }}</p>
-              <p class="text-xs text-muted">{{ product.boundAccounts }} 个账户</p>
-            </div>
-            <span class="text-sm font-medium text-highlighted">{{ formatCurrency(product.consumed) }}</span>
-          </div>
-
-          <USeparator />
-
-          <div class="flex items-center justify-between text-sm">
-            <span class="text-muted">合计</span>
-            <span class="font-semibold text-highlighted">{{ formatCurrency(totalInternalConsumed) }}</span>
-          </div>
-        </div>
-      </UCard>
-
-      <UCard>
-        <template #header>
-          <div class="flex items-center justify-between px-4 py-3">
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-link" class="text-secondary size-5" />
-              <span class="font-semibold text-highlighted">外接客户</span>
-            </div>
-            <UBadge :label="`${externalProducts.length} 个`" variant="subtle" color="secondary" size="xs" />
-          </div>
-        </template>
-
-        <div class="space-y-3">
-          <div
-            v-for="product in externalProducts"
-            :key="product.id"
-            class="flex items-center justify-between py-2 border-b border-default last:border-b-0"
-          >
-            <div>
-              <p class="text-sm font-medium text-highlighted">{{ product.name }}</p>
-              <p class="text-xs text-muted">{{ product.boundAccounts }} 个账户</p>
-            </div>
-            <span class="text-sm font-medium text-highlighted">{{ formatCurrency(product.consumed) }}</span>
-          </div>
-
-          <USeparator />
-
-          <div class="flex items-center justify-between text-sm">
-            <span class="text-muted">合计</span>
-            <span class="font-semibold text-highlighted">{{ formatCurrency(totalExternalConsumed) }}</span>
-          </div>
-        </div>
-      </UCard>
+    <div v-if="pending" class="rounded-lg border border-default p-6 text-sm text-muted">
+      加载中…
     </div>
 
-    <UCard>
-      <template #header>
-        <p class="text-xs text-muted uppercase">消耗占比</p>
-      </template>
-
-      <div class="space-y-4">
-        <div>
-          <div class="flex items-center justify-between text-sm mb-1">
-            <span class="text-muted">自家产品</span>
-            <span class="text-highlighted font-medium">
-              {{ totalConsumed ? Math.round((totalInternalConsumed / totalConsumed) * 100) : 0 }}%
-            </span>
-          </div>
-          <div class="h-3 rounded-full bg-elevated overflow-hidden">
-            <div
-              class="h-full rounded-full bg-primary transition-all"
-              :style="{ width: `${totalConsumed ? (totalInternalConsumed / totalConsumed) * 100 : 0}%` }"
-            />
-          </div>
-        </div>
-
-        <div>
-          <div class="flex items-center justify-between text-sm mb-1">
-            <span class="text-muted">外接客户</span>
-            <span class="text-highlighted font-medium">
-              {{ totalConsumed ? Math.round((totalExternalConsumed / totalConsumed) * 100) : 0 }}%
-            </span>
-          </div>
-          <div class="h-3 rounded-full bg-elevated overflow-hidden">
-            <div
-              class="h-full rounded-full bg-secondary transition-all"
-              :style="{ width: `${totalConsumed ? (totalExternalConsumed / totalConsumed) * 100 : 0}%` }"
-            />
-          </div>
-        </div>
-
-        <USeparator />
-
-        <div class="flex items-center justify-between text-sm">
-          <span class="text-muted">总消耗</span>
-          <span class="text-lg font-semibold text-highlighted">{{ formatCurrency(totalConsumed) }}</span>
-        </div>
+    <template v-else-if="segment === 'CUSTOMERS'">
+      <div
+        v-if="!customers.length"
+        class="rounded-lg border border-dashed border-default p-6 text-sm text-muted"
+      >
+        暂无外接客户。点击「新增客户」创建。
       </div>
-    </UCard>
+      <div v-else class="overflow-x-auto rounded-lg border border-default">
+        <UTable :data="customers" :columns="customerColumns" class="shrink-0">
+          <template #code-cell="{ row }">
+            <span class="font-mono text-xs text-muted">{{ row.original.code }}</span>
+          </template>
+          <template #productCount-cell="{ row }">
+            {{ productCountForCustomer(row.original.id) }}
+          </template>
+          <template #status-cell="{ row }">
+            <UBadge
+              :label="row.original.status"
+              :color="statusColor(row.original.status)"
+              variant="subtle"
+              size="xs"
+            />
+          </template>
+          <template #actions-cell="{ row }">
+            <div class="flex items-center gap-1">
+              <UButton
+                label="编辑"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                @click="openEditCustomer(row.original)"
+              />
+              <UButton
+                :label="row.original.status === 'ACTIVE' ? '停用' : '启用'"
+                size="xs"
+                :color="row.original.status === 'ACTIVE' ? 'warning' : 'success'"
+                variant="ghost"
+                @click="onToggleCustomerStatus(row.original)"
+              />
+            </div>
+          </template>
+        </UTable>
+      </div>
+    </template>
+
+    <template v-else>
+      <div
+        v-if="!filteredProducts.length"
+        class="rounded-lg border border-dashed border-default p-6 text-sm text-muted"
+      >
+        暂无{{ segment === 'INTERNAL' ? '自家' : '外接' }}产品。点击「新增产品」创建。
+      </div>
+      <div v-else class="overflow-x-auto rounded-lg border border-default">
+        <UTable :data="filteredProducts" :columns="productColumns" class="shrink-0">
+          <template #code-cell="{ row }">
+            <span class="font-mono text-xs text-muted">{{ row.original.code }}</span>
+          </template>
+          <template #customer-cell="{ row }">
+            <span class="text-sm text-muted">
+              {{ row.original.customerName ?? '—' }}
+            </span>
+          </template>
+          <template #bound-cell="{ row }">
+            {{ row.original.boundAccountCount }}
+          </template>
+          <template #status-cell="{ row }">
+            <UBadge
+              :label="row.original.status"
+              :color="statusColor(row.original.status)"
+              variant="subtle"
+              size="xs"
+            />
+          </template>
+          <template #actions-cell="{ row }">
+            <div class="flex items-center gap-1">
+              <UButton
+                label="编辑"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                @click="openEditProduct(row.original)"
+              />
+              <UButton
+                :label="row.original.status === 'ACTIVE' ? '停用' : '启用'"
+                size="xs"
+                :color="row.original.status === 'ACTIVE' ? 'warning' : 'success'"
+                variant="ghost"
+                @click="onToggleProductStatus(row.original)"
+              />
+            </div>
+          </template>
+        </UTable>
+      </div>
+    </template>
+
+    <SettingsProductFormModal
+      v-model:open="showProductModal"
+      :product="editingProduct"
+      :customers="customers"
+      :default-ownership="defaultOwnership"
+      @save="onSaveProduct"
+    />
+
+    <SettingsCustomerFormModal
+      v-model:open="showCustomerModal"
+      :customer="editingCustomer"
+      @save="onSaveCustomer"
+    />
   </div>
 </template>

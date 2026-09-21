@@ -29,7 +29,7 @@ const links = [[{
 }], [{
   label: '操作日志',
   icon: 'i-lucide-file-text',
-  to: '/settings/logs/operation'
+  to: '/settings/logs/operations'
 }, {
   label: '同步日志',
   icon: 'i-lucide-refresh-cw',

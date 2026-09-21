@@ -208,3 +208,54 @@ export interface AccountStats {
   mediaBanned: number
   withNote: number
 }
+
+/** Pool inventory stats; byMedia keys are media platform ids. */
+export interface AccountPoolStats {
+  total: number
+  byMedia: Record<string, number>
+}
+
+/**
+ * Usage Days = calendar days from receivedAt to MOCK_TODAY (inclusive intent).
+ * Technical debt: formal definition may later use first active assignment.
+ */
+export type AccountTimelineEventType =
+  | 'IMPORTED'
+  | 'ASSIGNED'
+  | 'TRANSFERRED'
+  | 'RECYCLED'
+  | 'PRODUCT_CHANGED'
+  | 'MANAGER_CHANGED'
+  | 'PLATFORM_ASSET_CHANGED'
+  | 'CHANNEL_CHANGED'
+  | 'FEE_POLICY_CHANGED'
+  | 'STATUS_CHANGED'
+  | 'DISABLED'
+
+export interface AccountTimelineEvent {
+  id: string
+  accountId: string
+  type: AccountTimelineEventType
+  at: string
+  title: string
+  description: string
+  actor?: string | null
+}
+
+export interface AccountRelationHistory {
+  assignments: AccountAssignment[]
+  managers: AccountManagerAssignment[]
+  products: AccountProductAssignment[]
+  platformAssets: AccountPlatformAssetAssignment[]
+  channels: AccountChannelAssignment[]
+  feePolicies: AccountServiceFeePolicyAssignment[]
+}
+
+export interface AccountDetailBundle {
+  account: AdAccountListItem
+  entity: AdAccount
+  history: AccountRelationHistory
+  timeline: AccountTimelineEvent[]
+  /** Calendar days from receivedAt to reference date; null if no receivedAt. */
+  usageDays: number | null
+}

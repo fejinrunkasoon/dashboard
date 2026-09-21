@@ -1,4 +1,4 @@
-import type { EntityStatus } from './common'
+import type { EntityStatus, ProductOwnership } from './common'
 
 export interface ServiceFeePolicy {
   id: string
@@ -51,12 +51,53 @@ export interface ChannelMonthlySettlementSummary {
   settlementCost: number
 }
 
+export type ChannelPaymentAddressType = 'CRYPTO' | 'FIAT'
+
+export type ChannelPaymentAddressStatus =
+  | 'ACTIVE'
+  | 'PENDING_APPROVAL'
+  | 'REJECTED'
+  | 'DISABLED'
+
+/**
+ * Mock finance operators for policy edits, refund confirm/reject, and reconciliation.
+ * Not a permission matrix.
+ */
+export const FINANCE_OPERATOR_MEMBER_IDS = ['mem-lisi'] as const
+
+/** Absolute variance rate above this opens a reconciliation alert. Matches rules page default. */
+export const RECONCILIATION_VARIANCE_THRESHOLD = 0.05
+
+export function isFinanceOperator(memberId: string | null | undefined): boolean {
+  return !!memberId && (FINANCE_OPERATOR_MEMBER_IDS as readonly string[]).includes(memberId)
+}
+
+/** Channel remittance destination; multiple per channel. Approval = STEP 23. */
+export interface ChannelPaymentAddress {
+  id: string
+  channelId: string
+  type: ChannelPaymentAddressType
+  label?: string | null
+  /** Single payload string; network/bank fields stay combined until a later split. */
+  addressPayload: string
+  status: ChannelPaymentAddressStatus
+  approverTeamId: string
+  submittedByMemberId: string
+  reviewedByMemberId?: string | null
+  reviewedAt?: string | null
+  reviewNote?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export type ChannelPrepaymentStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED'
 
 export interface ChannelPrepayment {
   id: string
   paymentNo: string
   channelId: string
+  paymentAddressId: string
+  productOwnership: ProductOwnership
   amount: number
   currency: string
   status: ChannelPrepaymentStatus
@@ -87,4 +128,26 @@ export interface SettlementQuery {
   year: number
   month: number
   currency?: string
+}
+
+export type ChannelReconciliationStatus = 'OPEN' | 'CONFIRMED'
+
+/** Channel bill vs system Media Spend. Not a fund ledger. */
+export interface ChannelReconciliation {
+  id: string
+  channelId: string
+  year: number
+  month: number
+  currency: string
+  channelBillMediaSpend: number
+  systemMediaSpend: number
+  variance: number
+  /** Null when system spend is 0 and the bill is not. */
+  varianceRate: number | null
+  status: ChannelReconciliationStatus
+  note?: string | null
+  confirmedByMemberId?: string | null
+  confirmedAt?: string | null
+  createdAt: string
+  updatedAt: string
 }

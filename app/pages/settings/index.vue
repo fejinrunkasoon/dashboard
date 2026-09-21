@@ -1,172 +1,344 @@
 <script setup lang="ts">
-import type { Channel, Payment } from '~/types'
+import type { MediaCredentialStatus, MediaFieldDefinition, MediaFieldUsage } from '~/domain'
+import type { ConnectorBindingListItem } from '~/services'
 
-const { data: channels } = await useFetch<Channel[]>('/api/channels')
-const { data: payments } = await useFetch<Payment[]>('/api/payments')
+useSeoMeta({ title: '数据接入 · Media Connector' })
 
-const selectedChannel = ref<Channel | null>(null)
-const showPaymentHistory = ref(false)
+const toast = useToast()
 
-const channelPayments = computed(() => {
-  if (!selectedChannel.value || !payments.value) return []
-  return payments.value.filter(p => p.channelId === selectedChannel.value!.id)
+const {
+  definitions,
+  bindings,
+  activePlatforms,
+  assetTypes: allAssetTypes,
+  selectedBindingId,
+  selectedBinding,
+  demandFields,
+  accountMapFields,
+  credentials,
+  selectedCredentialId,
+  syncScope,
+  assetTypesForSelectedMedia,
+  pending,
+  errorMessage,
+  refresh,
+  selectBinding,
+  selectCredential,
+  createBinding,
+  updateBinding,
+  setBindingStatus,
+  createField,
+  updateField,
+  setFieldStatus,
+  createCredential,
+  setCredentialStatus,
+  saveSyncScope,
+  activeAssetTypesForMedia
+} = useMediaConnectors()
+
+await refresh()
+
+const showBindingModal = ref(false)
+const editingBinding = ref<ConnectorBindingListItem | null>(null)
+const showFieldModal = ref(false)
+const editingField = ref<MediaFieldDefinition | null>(null)
+const fieldModalUsage = ref<MediaFieldUsage>('DEMAND')
+const saving = ref(false)
+
+function openCreateBinding() {
+  editingBinding.value = null
+  showBindingModal.value = true
+}
+
+function openEditBinding(binding: ConnectorBindingListItem) {
+  editingBinding.value = binding
+  showBindingModal.value = true
+}
+
+async function onSaveBinding(payload: { mediaId: string, implKey: string, assetTypeIds: string[] }) {
+  if (saving.value) return
+  saving.value = true
+  try {
+    if (editingBinding.value) {
+      await updateBinding(editingBinding.value.id, {
+        implKey: payload.implKey,
+        assetTypeIds: payload.assetTypeIds
+      })
+      toast.add({ title: '已更新绑定', icon: 'i-lucide-check', color: 'success' })
+    } else {
+      await createBinding(payload)
+      toast.add({ title: '已绑定 Connector', icon: 'i-lucide-check', color: 'success' })
+    }
+    showBindingModal.value = false
+  } catch (error) {
+    toast.add({
+      title: '保存失败',
+      description: error instanceof Error ? error.message : '未知错误',
+      icon: 'i-lucide-alert-circle',
+      color: 'error'
+    })
+  } finally {
+    saving.value = false
+  }
+}
+
+async function onToggleBindingStatus(binding: ConnectorBindingListItem) {
+  const next = binding.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE'
+  try {
+    await setBindingStatus(binding.id, next)
+    toast.add({
+      title: next === 'ACTIVE' ? '已启用绑定' : '已停用绑定',
+      icon: 'i-lucide-check',
+      color: 'success'
+    })
+  } catch (error) {
+    toast.add({
+      title: '状态更新失败',
+      description: error instanceof Error ? error.message : '未知错误',
+      icon: 'i-lucide-alert-circle',
+      color: 'error'
+    })
+  }
+}
+
+function openCreateField(usage: MediaFieldUsage) {
+  editingField.value = null
+  fieldModalUsage.value = usage
+  showFieldModal.value = true
+}
+
+function openEditField(field: MediaFieldDefinition) {
+  editingField.value = field
+  fieldModalUsage.value = field.usage
+  showFieldModal.value = true
+}
+
+async function onSaveField(payload: {
+  mediaId: string
+  usage: MediaFieldUsage
+  key: string
+  label: string
+  fieldType: 'text' | 'select'
+  required: boolean
+  options?: { label: string, value: string }[]
+  sourceKey?: string | null
+}) {
+  if (saving.value) return
+  saving.value = true
+  try {
+    if (editingField.value) {
+      await updateField(editingField.value.id, {
+        label: payload.label,
+        fieldType: payload.fieldType,
+        required: payload.required,
+        options: payload.options,
+        sourceKey: payload.sourceKey
+      })
+      toast.add({ title: '已更新字段', icon: 'i-lucide-check', color: 'success' })
+    } else {
+      await createField(payload)
+      toast.add({ title: '已创建字段', icon: 'i-lucide-check', color: 'success' })
+    }
+    showFieldModal.value = false
+  } catch (error) {
+    toast.add({
+      title: '保存失败',
+      description: error instanceof Error ? error.message : '未知错误',
+      icon: 'i-lucide-alert-circle',
+      color: 'error'
+    })
+  } finally {
+    saving.value = false
+  }
+}
+
+async function onToggleFieldStatus(field: MediaFieldDefinition) {
+  const next = field.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE'
+  try {
+    await setFieldStatus(field.id, next)
+    toast.add({
+      title: next === 'ACTIVE' ? '已启用字段' : '已停用字段',
+      icon: 'i-lucide-check',
+      color: 'success'
+    })
+  } catch (error) {
+    toast.add({
+      title: '状态更新失败',
+      description: error instanceof Error ? error.message : '未知错误',
+      icon: 'i-lucide-alert-circle',
+      color: 'error'
+    })
+  }
+}
+
+async function onCreateCredential(label: string) {
+  if (!selectedBinding.value) return
+  try {
+    await createCredential({
+      connectorBindingId: selectedBinding.value.id,
+      label
+    })
+    toast.add({ title: '已创建 Mock Credential', icon: 'i-lucide-check', color: 'success' })
+  } catch (error) {
+    toast.add({
+      title: '创建失败',
+      description: error instanceof Error ? error.message : '未知错误',
+      icon: 'i-lucide-alert-circle',
+      color: 'error'
+    })
+  }
+}
+
+async function onSetCredentialStatus(id: string, status: MediaCredentialStatus) {
+  try {
+    await setCredentialStatus(id, status)
+    toast.add({ title: `Credential → ${status}`, icon: 'i-lucide-check', color: 'success' })
+  } catch (error) {
+    toast.add({
+      title: '状态更新失败',
+      description: error instanceof Error ? error.message : '未知错误',
+      icon: 'i-lucide-alert-circle',
+      color: 'error'
+    })
+  }
+}
+
+async function onSaveScope(payload: {
+  discoverAccounts: boolean
+  syncSpend: boolean
+  syncStatus: boolean
+  assetTypeIds: string[]
+}) {
+  if (!selectedCredentialId.value) return
+  try {
+    await saveSyncScope(selectedCredentialId.value, payload)
+    toast.add({ title: '已保存同步范围', icon: 'i-lucide-check', color: 'success' })
+  } catch (error) {
+    toast.add({
+      title: '保存失败',
+      description: error instanceof Error ? error.message : '未知错误',
+      icon: 'i-lucide-alert-circle',
+      color: 'error'
+    })
+  }
+}
+
+const bindingModalAssetTypes = computed(() => {
+  if (editingBinding.value) {
+    return activeAssetTypesForMedia(editingBinding.value.mediaId)
+  }
+  return allAssetTypes.value.filter(item => item.status === 'ACTIVE')
 })
-
-const paymentStatusColor = (status: string) => {
-  const map: Record<string, string> = { pending: 'warning', confirmed: 'success', failed: 'error' }
-  return map[status] ?? 'neutral'
-}
-
-const paymentStatusLabel = (status: string) => {
-  const map: Record<string, string> = { pending: '待确认', confirmed: '已确认', failed: '失败' }
-  return map[status] ?? status
-}
-
-const formatCurrency = (value: number) => `$${value.toLocaleString()}`
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="space-y-8">
     <UPageCard
-      title="数据接入"
-      description="管理上游渠道数据源接入，查看账户质量、余额和打款记录。"
+      title="数据接入 · Media Connector"
+      description="注册实现绑定到 MediaPlatform，配置 Asset Type、专属字段、Mock Credential 与同步范围。发现 / 导入请到「媒体同步」。不接真实 OAuth。"
       variant="naked"
       orientation="horizontal"
-      class="mb-4"
+      class="mb-2"
+    />
+
+    <UAlert
+      v-if="errorMessage"
+      color="error"
+      variant="subtle"
+      icon="i-lucide-alert-circle"
+      :title="errorMessage"
+      class="mb-2"
     >
-      <div class="flex gap-2 w-fit lg:ms-auto">
-        <UButton
-          label="新增渠道"
-          icon="i-lucide-plus"
-          color="neutral"
-        />
-        <UButton
-          label="同步数据"
-          icon="i-lucide-refresh-cw"
-          color="primary"
-          variant="outline"
-        />
+      <template #description>
+        <UButton label="重试" size="xs" color="neutral" variant="soft" class="mt-2" @click="refresh" />
+      </template>
+    </UAlert>
+
+    <SettingsConnectorBindingTable
+      :bindings="bindings"
+      :selected-binding-id="selectedBindingId"
+      :pending="pending"
+      @select="selectBinding"
+      @create="openCreateBinding"
+      @edit="openEditBinding"
+      @toggle-status="onToggleBindingStatus"
+    />
+
+    <div class="space-y-6 rounded-lg border border-default p-4 sm:p-6">
+      <div>
+        <h3 class="text-sm font-semibold text-highlighted">
+          专属字段
+          <span v-if="selectedBinding" class="font-normal text-muted">
+            · {{ selectedBinding.mediaName }}
+          </span>
+        </h3>
+        <p class="text-xs text-muted">
+          DEMAND 字段供申请单动态读取；ACCOUNT_MAP 在媒体同步确认导入时映射展示字段。Timezone 为公共字段，不在此维护。
+        </p>
       </div>
-    </UPageCard>
 
-    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <UCard
-        v-for="channel in channels"
-        :key="channel.id"
-        :ui="{ body: 'p-4 sm:p-4' }"
-        class="cursor-pointer transition-shadow hover:shadow-md"
-        :class="{ 'ring-2 ring-primary': selectedChannel?.id === channel.id }"
-        @click="selectedChannel = channel; showPaymentHistory = true"
+      <div
+        v-if="!selectedBinding"
+        class="rounded-lg border border-dashed border-default p-6 text-sm text-muted"
       >
-        <template #header>
-          <div class="flex items-center justify-between px-4 py-3">
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-git-branch" class="text-primary size-5" />
-              <span class="font-semibold text-highlighted">{{ channel.name }}</span>
-            </div>
-            <UBadge
-              :label="channel.status === 'active' ? '活跃' : '停用'"
-              :color="channel.status === 'active' ? 'success' : 'error'"
-              variant="subtle"
-              size="xs"
-            />
-          </div>
-        </template>
-
-        <div class="space-y-3 text-sm">
-          <div class="flex justify-between">
-            <span class="text-muted">联系方式</span>
-            <span class="text-highlighted">{{ channel.contactInfo }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-muted">支持媒体</span>
-            <div class="flex gap-1">
-              <UBadge
-                v-for="media in channel.supportedMedia"
-                :key="media"
-                :label="media"
-                variant="subtle"
-                color="neutral"
-                size="xs"
-              />
-            </div>
-          </div>
-          <USeparator />
-          <div class="flex justify-between">
-            <span class="text-muted">总账户</span>
-            <span class="text-highlighted font-medium">{{ channel.totalAccounts }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-muted">活跃 / 可分配</span>
-            <span class="text-highlighted font-medium">{{ channel.activeAccounts }} / {{ channel.availableAccounts }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-muted">封户率</span>
-            <span :class="channel.banRate > 10 ? 'text-error font-medium' : 'text-highlighted font-medium'">{{ channel.banRate }}%</span>
-          </div>
-          <USeparator />
-          <div class="flex justify-between">
-            <span class="text-muted">累计消耗</span>
-            <span class="text-highlighted font-medium">{{ formatCurrency(channel.consumed) }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-muted">累计打款</span>
-            <span class="text-highlighted font-medium">{{ formatCurrency(channel.totalPayment) }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-muted">当前余额</span>
-            <span :class="channel.estimatedDays <= 5 ? 'text-warning font-medium' : 'text-highlighted font-medium'">{{ formatCurrency(channel.balance) }}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-muted">预计可用</span>
-            <span :class="channel.estimatedDays <= 5 ? 'text-warning font-medium' : 'text-highlighted font-medium'">{{ channel.estimatedDays }} 天</span>
-          </div>
-        </div>
-      </UCard>
+        请先在上方选择一条绑定。
+      </div>
+      <template v-else>
+        <SettingsConnectorFieldTable
+          title="申请单字段（DEMAND）"
+          description="替换硬编码 media-specific 表；新建媒体配字段后申请弹窗自动出现。"
+          usage="DEMAND"
+          :fields="demandFields"
+          :disabled="selectedBinding.status !== 'ACTIVE'"
+          :pending="pending"
+          @create="openCreateField"
+          @edit="openEditField"
+          @toggle-status="onToggleFieldStatus"
+        />
+        <SettingsConnectorFieldTable
+          title="账户字段映射（ACCOUNT_MAP）"
+          description="配置 only；本步不拉取媒体数据。"
+          usage="ACCOUNT_MAP"
+          :fields="accountMapFields"
+          :disabled="selectedBinding.status !== 'ACTIVE'"
+          :pending="pending"
+          @create="openCreateField"
+          @edit="openEditField"
+          @toggle-status="onToggleFieldStatus"
+        />
+      </template>
     </div>
 
-    <UModal v-model:open="showPaymentHistory">
-      <template #content>
-        <UCard>
-          <template #header>
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-receipt" class="size-5" />
-              <span class="font-semibold">{{ selectedChannel?.name }} — 打款记录</span>
-            </div>
-          </template>
+    <div class="rounded-lg border border-default p-4 sm:p-6">
+      <SettingsConnectorCredentialPanel
+        :binding="selectedBinding"
+        :credentials="credentials"
+        :selected-credential-id="selectedCredentialId"
+        :sync-scope="syncScope"
+        :asset-types="assetTypesForSelectedMedia"
+        :pending="pending"
+        @select-credential="selectCredential"
+        @create-credential="onCreateCredential"
+        @set-credential-status="onSetCredentialStatus"
+        @save-scope="onSaveScope"
+      />
+    </div>
 
-          <div class="space-y-3">
-            <div
-              v-for="payment in channelPayments"
-              :key="payment.id"
-              class="flex items-center justify-between py-2 border-b border-default last:border-b-0"
-            >
-              <div class="text-sm">
-                <p class="text-highlighted font-medium">{{ formatCurrency(payment.amount) }}</p>
-                <p class="text-muted text-xs">
-                  {{ new Date(payment.paymentTime).toLocaleDateString('zh-CN') }} · {{ payment.method }}
-                </p>
-              </div>
-              <div class="flex items-center gap-2">
-                <UBadge
-                  :label="paymentStatusLabel(payment.status)"
-                  :color="paymentStatusColor(payment.status)"
-                  variant="subtle"
-                  size="xs"
-                />
-                <span v-if="payment.receipt" class="text-xs text-muted font-mono">{{ payment.receipt }}</span>
-              </div>
-            </div>
+    <SettingsConnectorBindingFormModal
+      v-model:open="showBindingModal"
+      :binding="editingBinding"
+      :platforms="activePlatforms"
+      :definitions="definitions"
+      :asset-types="bindingModalAssetTypes"
+      @save="onSaveBinding"
+    />
 
-            <div
-              v-if="!channelPayments.length"
-              class="text-center text-dimmed py-4"
-            >
-              暂无打款记录
-            </div>
-          </div>
-        </UCard>
-      </template>
-    </UModal>
+    <SettingsConnectorFieldFormModal
+      v-model:open="showFieldModal"
+      :media-id="selectedBinding?.mediaId ?? null"
+      :usage="fieldModalUsage"
+      :field="editingField"
+      @save="onSaveField"
+    />
   </div>
 </template>

@@ -1,0 +1,2690 @@
+# FFJ 广告账户管理系统
+# Phase 1 — Frontend Domain Foundation
+# FINAL SPECIFICATION
+#
+# Phase 0：项目代码审计已经完成。
+# 当前开始 Phase 1。
+#
+# 本文覆盖此前所有 Phase 1 草案。
+# 如旧定义与本文冲突，以本文为准。
+# 会签后路线以 plan.md §40 为准：STEP 15 Domain Checkpoint 之后先用 Mock 跑通
+# （含模拟 TG），STEP 24 E2E 通过后才建 PostgreSQL。不是冻结后立刻建库。
+# Order / Telegram 规则以 plan.md §41 / §14 为准；与下文「四十五」冲突时以上述为准。
+
+
+==================================================
+一、Phase 1 目标
+==================================================
+
+当前项目处于：
+
+Frontend Domain Prototype
+
+技术栈：
+
+Nuxt 4
+Vue 3
+Nuxt UI
+TypeScript
+
+未来：
+
+PostgreSQL
+Nuxt Server API
+Media API Connectors
+Telegram Integration
+
+
+当前阶段不要建立数据库。
+
+Phase 1 目标：
+
+建立后续业务页面共同使用的稳定前端领域基础：
+
+1. Domain Types
+2. Dynamic Media Model
+3. Account Domain
+4. Product Domain
+5. Platform Asset Domain
+6. Organization Domain
+7. Account Relationship History
+8. Spend Domain
+9. Service Fee Policy Domain
+10. Channel Settlement Domain
+11. Account Demand Domain
+12. Channel Account Order Domain
+13. Alert Domain
+14. Query Models
+15. Service Interfaces
+16. Mock Dataset
+17. Mock Services
+18. Filter / Pagination基础设施
+
+Phase 1完成后再进入：
+
+Phase 2 — Account Center / All Accounts
+
+
+==================================================
+二、本阶段明确不做
+==================================================
+
+禁止：
+
+PostgreSQL
+ORM
+Prisma
+Drizzle
+
+真实Nuxt业务API重构
+
+Meta API
+Google API
+TikTok API
+其他媒体API
+
+OAuth
+Credential
+
+Telegram Bot
+
+正式Finance Ledger
+
+正式打款审批
+
+正式退款审批
+
+Reconciliation
+
+复杂RBAC
+
+Account Detail完整页面
+
+Account Pool完整页面
+
+Demand Scheduling完整页面
+
+
+当前只建立正确的数据和业务架构。
+
+
+==================================================
+三、系统核心业务链
+==================================================
+
+FFJ核心业务：
+
+Channel
+↓
+提供广告账户
+↓
+Ad Account
+↓
+Account Pool
+↓
+Team Demand
+↓
+Demand Allocation
+↓
+Account Assignment
+↓
+Team / Member
+↓
+Product
+↓
+Media Spend
+↓
+状态 / 表现
+↓
+Transfer / Recycle / Disable
+↓
+Alert
+
+
+账户不足：
+
+Team Demand
+↓
+Account Pool不足
+↓
+Channel Account Order
+↓
+Telegram沟通（未来）
+↓
+渠道交户
+↓
+Account入库
+↓
+Account Pool
+↓
+满足Demand
+
+
+==================================================
+四、Media Platform原则
+==================================================
+
+禁止写死：
+
+Meta
+Google
+TikTok
+
+
+它们只是当前存在的数据。
+
+
+未来可以增加：
+
+Snapchat
+Microsoft Ads
+X Ads
+其他媒体。
+
+
+建立：
+
+interface MediaPlatform {
+  id: string
+  code: string
+  name: string
+  logoUrl?: string
+  status: EntityStatus
+}
+
+
+Mock必须至少包含：
+
+Meta
+Google
+TikTok
+Snapchat
+
+
+Snapchat用于验证：
+
+新增第四媒体不需要修改AdAccount模型。
+
+
+禁止：
+
+type Media = 'Meta' | 'Google' | 'TikTok'
+
+
+旧代码如果依赖：
+
+允许暂时Compatibility。
+
+但新Domain禁止使用。
+
+
+==================================================
+五、Channel
+==================================================
+
+Channel代表：
+
+上游账户提供渠道。
+
+
+建立：
+
+interface Channel {
+  id: string
+  code: string
+  name: string
+
+  status: EntityStatus
+
+  supportedMediaIds: string[]
+
+  contactName?: string | null
+  telegramReference?: string | null
+
+  note?: string | null
+
+  createdAt: string
+  updatedAt: string
+}
+
+
+Channel不直接存：
+
+账户数量
+消耗
+服务费
+余额
+
+
+这些以后全部属于Read Model / Aggregation。
+
+
+==================================================
+六、Product最终规则
+==================================================
+
+不再使用：
+
+ProductCategory → ownershipType
+
+推导自家/外接。
+
+
+Product直接拥有：
+
+ownershipType。
+
+
+type ProductOwnership =
+  | 'INTERNAL'
+  | 'EXTERNAL'
+
+
+建立：
+
+interface Product {
+  id: string
+  code: string
+  name: string
+
+  ownershipType: ProductOwnership
+
+  customerId?: string | null
+
+  status: EntityStatus
+
+  note?: string | null
+}
+
+
+业务：
+
+INTERNAL
+=
+自家产品
+
+
+EXTERNAL
+=
+外接产品
+
+
+==================================================
+七、Customer
+==================================================
+
+外接产品允许关联Customer。
+
+
+interface Customer {
+  id: string
+  code: string
+  name: string
+
+  status: EntityStatus
+
+  note?: string | null
+}
+
+
+例如：
+
+Alpha Shop
+
+ownershipType:
+EXTERNAL
+
+customer:
+Alpha
+
+
+UI：
+
+Alpha Shop
+外接 · Alpha
+
+
+==================================================
+八、Organization
+==================================================
+
+建立：
+
+Team
+Member
+
+
+Team：
+
+id
+code
+name
+leaderMemberId?
+status
+
+
+Member：
+
+id
+code
+name
+teamId
+status
+
+
+==================================================
+九、Member和户管必须区分业务角色
+==================================================
+
+同一个Member实体可以承担不同业务角色。
+
+
+Current Member：
+
+实际使用广告账户投放的人。
+
+
+Current Account Manager / 户管：
+
+负责：
+
+开户
+绑定
+媒体管理资产
+权限
+BM等账户维护。
+
+
+两者不能混淆。
+
+
+账户从：
+
+张三
+→
+李四
+
+划转使用权时：
+
+不得自动改变户管。
+
+
+==================================================
+十、Platform Asset统一抽象
+==================================================
+
+不同Media拥有不同管理资产。
+
+
+Meta
+→ BM
+
+Google
+→ MCC
+
+TikTok
+→ Business Center
+
+其他媒体
+→ 其他类型
+
+
+禁止在AdAccount核心模型中建立：
+
+bmId
+
+
+统一使用：
+
+PlatformAssetType
+PlatformAsset
+
+
+==================================================
+十一、PlatformAssetType
+==================================================
+
+interface PlatformAssetType {
+  id: string
+
+  mediaId: string
+
+  code: string
+  name: string
+}
+
+
+Mock：
+
+Meta
+BUSINESS_MANAGER
+BM
+
+
+Google
+MANAGER_ACCOUNT
+MCC
+
+
+TikTok
+BUSINESS_CENTER
+Business Center
+
+
+禁止代码假设只有这些类型。
+
+
+==================================================
+十二、PlatformAsset
+==================================================
+
+interface PlatformAsset {
+  id: string
+
+  mediaId: string
+  typeId: string
+
+  externalId: string
+
+  name?: string | null
+
+  sourceChannelId?: string | null
+
+  status: string
+
+  note?: string | null
+
+  createdAt: string
+  updatedAt: string
+}
+
+
+externalId就是媒体实际管理资产ID。
+
+
+例如：
+
+Meta：
+
+BM ID
+123456789
+
+
+Google：
+
+MCC ID
+987654321
+
+
+TikTok：
+
+Business Center ID
+xxxxxx
+
+
+UI Label根据：
+
+PlatformAssetType.name
+
+动态展示。
+
+
+==================================================
+十三、AdAccount核心模型
+==================================================
+
+AdAccount表示广告账户自身。
+
+
+interface AdAccount {
+  id: string
+
+  externalAccountId: string
+
+  name?: string | null
+
+  mediaId: string
+
+  sourceChannelId: string
+
+  timezone?: string | null
+
+  spendLimit?: number | null
+
+  serviceFeePolicyId?: string | null
+
+  assetStatus: AccountAssetStatus
+
+  mediaStatus: AccountMediaStatus
+
+  note?: string | null
+
+  receivedAt?: string | null
+
+  firstSeenAt?: string | null
+
+  lastSyncAt?: string | null
+
+  createdAt: string
+  updatedAt: string
+}
+
+
+==================================================
+十四、Account Note
+==================================================
+
+Account必须支持：
+
+note
+
+
+用于：
+
+异常补充
+运营备注
+特殊情况
+
+
+例如：
+
+“9月14日支付异常，继续观察”
+
+“渠道通知该BM近期不稳定”
+
+
+注意：
+
+Note不能替代：
+
+Status
+Alert
+Transfer Reason
+Product History
+Manager History
+
+
+==================================================
+十五、账户内部资产状态
+==================================================
+
+AccountAssetStatus：
+
+AVAILABLE
+ASSIGNED
+IN_USE
+IDLE
+DISABLED
+ARCHIVED
+
+
+==================================================
+十六、媒体状态
+==================================================
+
+AccountMediaStatus：
+
+ACTIVE
+RESTRICTED
+DISABLED
+BANNED
+UNKNOWN
+
+
+==================================================
+十七、API Access状态
+==================================================
+
+未来：
+
+ApiAccessStatus：
+
+ACCESSIBLE
+LOST
+UNKNOWN
+
+
+它和：
+
+Asset Status
+Media Status
+
+是三个完全独立的概念。
+
+
+==================================================
+十八、账户关系必须保存历史
+==================================================
+
+禁止只：
+
+account.teamId = xxx
+
+
+所有会变化的重要关系：
+
+必须表达历史。
+
+
+==================================================
+十九、AccountAssignment
+==================================================
+
+表示：
+
+Account给哪个Team / Member使用。
+
+
+interface AccountAssignment {
+  id: string
+
+  accountId: string
+
+  teamId: string
+
+  memberId?: string | null
+
+  startedAt: string
+
+  endedAt?: string | null
+
+  reason?: string | null
+
+  createdBy?: string | null
+}
+
+
+endedAt = null
+
+表示当前有效。
+
+
+==================================================
+二十、AccountManagerAssignment
+==================================================
+
+表示户管历史。
+
+
+interface AccountManagerAssignment {
+  id: string
+
+  accountId: string
+
+  managerMemberId: string
+
+  startedAt: string
+
+  endedAt?: string | null
+
+  reason?: string | null
+
+  createdBy?: string | null
+}
+
+
+==================================================
+二十一、AccountProductAssignment
+==================================================
+
+表示：
+
+账户在某时间段跑什么产品。
+
+
+interface AccountProductAssignment {
+  id: string
+
+  accountId: string
+
+  productId: string
+
+  startedAt: string
+
+  endedAt?: string | null
+
+  reason?: string | null
+
+  createdBy?: string | null
+}
+
+
+==================================================
+二十二、AccountPlatformAssetAssignment
+==================================================
+
+表示：
+
+Account历史上挂在哪个媒体管理资产。
+
+
+interface AccountPlatformAssetAssignment {
+  id: string
+
+  accountId: string
+
+  platformAssetId: string
+
+  startedAt: string
+
+  endedAt?: string | null
+
+  reason?: string | null
+
+  createdBy?: string | null
+}
+
+
+例如：
+
+FB001
+
+9/01 - 9/15
+BM A
+
+9/15 -
+BM B
+
+
+Account ID不改变。
+
+
+==================================================
+二十三、Account Channel归属历史
+==================================================
+
+渠道归属对于未来月度结算非常重要。
+
+
+建立：
+
+interface AccountChannelAssignment {
+  id: string
+
+  accountId: string
+
+  channelId: string
+
+  startedAt: string
+
+  endedAt?: string | null
+
+  reason?: string | null
+}
+
+
+当前：
+
+AdAccount.sourceChannelId
+
+继续表示：
+
+账户来源渠道。
+
+
+但未来：
+
+如果业务渠道归属发生变化，
+
+月度结算必须按历史Channel Assignment判断。
+
+
+禁止未来简单覆盖：
+
+sourceChannelId。
+
+
+==================================================
+二十四、账户消耗最终业务定义
+==================================================
+
+非常重要：
+
+账户页面：
+
+“已花费”
+
+=
+
+账户累计媒体消耗。
+
+
+Amount Spent
+=
+Lifetime Media Spend
+
+
+不包含：
+
+Service Fee。
+
+
+==================================================
+二十五、AccountSpendDaily
+==================================================
+
+建立真正的Mock基础事实：
+
+
+interface AccountSpendDaily {
+  accountId: string
+
+  date: string
+
+  currency: string
+
+  spend: number
+}
+
+
+所有：
+
+Today
+7D
+30D
+Custom Period
+Lifetime
+
+必须从Daily Spend聚合。
+
+
+==================================================
+二十六、AccountSpendMetrics
+==================================================
+
+interface AccountSpendMetrics {
+  accountId: string
+
+  currency: string
+
+  spendLimit?: number | null
+
+  amountSpent: number
+
+  remainingLimit?: number | null
+
+  todaySpend: number
+
+  spend7d: number
+
+  spend30d: number
+
+  lastSpendAt?: string | null
+}
+
+
+定义：
+
+
+amountSpent
+=
+Lifetime Media Spend
+
+
+todaySpend
+=
+Today Media Spend
+
+
+spend7d
+=
+Recent 7 Days Media Spend
+
+
+spend30d
+=
+Recent 30 Days Media Spend
+
+
+==================================================
+二十七、Remaining Limit
+==================================================
+
+如果：
+
+spendLimit存在
+
+
+则：
+
+remainingLimit
+=
+spendLimit - amountSpent
+
+
+建议：
+
+Math.max(..., 0)
+
+
+如果：
+
+spendLimit不存在
+
+
+remainingLimit：
+
+null
+
+
+UI未来显示：
+
+—
+
+
+禁止显示：
+
+$0
+
+
+==================================================
+二十八、Spend Limit
+==================================================
+
+Spend Limit：
+
+账户自身的媒体花费上限。
+
+
+它不是：
+
+Channel Prepayment
+
+
+也不是：
+
+Channel Available Balance。
+
+
+==================================================
+二十九、Spend Date Range
+==================================================
+
+系统必须支持：
+
+今日
+7日
+30日
+任意日期范围
+
+
+建立：
+
+interface SpendDateRange {
+  from: string
+  to: string
+}
+
+
+建立：
+
+interface AccountSpendWindow {
+  accountId: string
+
+  from: string
+  to: string
+
+  spend: number
+
+  currency: string
+}
+
+
+不要建立：
+
+spend15d
+spend90d
+customSpend
+
+等固定字段。
+
+
+==================================================
+三十、Service Fee业务模型
+==================================================
+
+渠道会根据Account适用的政策收取服务费。
+
+
+政策：
+
+按账户绑定。
+
+
+同一个Channel提供的不同Account：
+
+允许使用不同Policy。
+
+
+==================================================
+三十一、ServiceFeePolicy
+==================================================
+
+interface ServiceFeePolicy {
+  id: string
+
+  channelId: string
+
+  code: string
+  name: string
+
+  status: EntityStatus
+
+  effectiveFrom?: string | null
+  effectiveTo?: string | null
+
+  note?: string | null
+}
+
+
+==================================================
+三十二、ServiceFeeTier
+==================================================
+
+interface ServiceFeeTier {
+  id: string
+
+  policyId: string
+
+  minSpend: number
+
+  maxSpend?: number | null
+
+  rate: number
+
+  sortOrder: number
+}
+
+
+内部Rate：
+
+2%
+=
+0.02
+
+
+==================================================
+三十三、服务费梯度算法已确认
+==================================================
+
+使用：
+
+NON_PROGRESSIVE_TIER
+
+
+即：
+
+整段档位费率。
+
+
+例如：
+
+0 - 10,000
+2%
+
+
+10,000 - 50,000
+1.5%
+
+
+50,000+
+1%
+
+
+月度Account Media Spend：
+
+20,000
+
+
+匹配：
+
+1.5%
+
+
+Service Fee：
+
+20,000 × 1.5%
+
+=
+300
+
+
+禁止计算：
+
+10,000×2%
++
+10,000×1.5%
+
+
+==================================================
+三十四、服务费计算周期
+==================================================
+
+Service Fee：
+
+按月计算。
+
+
+计算单位：
+
+单个Ad Account。
+
+
+流程：
+
+Account
+↓
+统计该月Media Spend
+↓
+读取该Account当月有效Policy
+↓
+匹配Tier
+↓
+整个Month Spend × Tier Rate
+↓
+Account Monthly Service Fee
+
+
+==================================================
+三十五、Account Fee Policy历史
+==================================================
+
+建立：
+
+interface AccountServiceFeePolicyAssignment {
+  id: string
+
+  accountId: string
+
+  policyId: string
+
+  startedAt: string
+
+  endedAt?: string | null
+}
+
+
+原因：
+
+Policy未来可能改变。
+
+
+历史月份：
+
+必须使用历史Policy。
+
+
+不能使用当前Policy重新计算历史Service Fee。
+
+
+==================================================
+三十六、ServiceFeeCalculator
+==================================================
+
+建立独立Calculator。
+
+
+输入：
+
+monthlyMediaSpend
+policy
+tiers
+
+
+输出：
+
+interface ServiceFeeCalculationResult {
+  mediaSpend: number
+
+  matchedTierId?: string | null
+
+  appliedRate: number
+
+  serviceFee: number
+}
+
+
+算法：
+
+NON_PROGRESSIVE_TIER
+
+
+==================================================
+三十七、AccountMonthlySettlement
+==================================================
+
+建立Read Model：
+
+
+interface AccountMonthlySettlement {
+  accountId: string
+
+  channelId: string
+
+  year: number
+  month: number
+
+  currency: string
+
+  mediaSpend: number
+
+  serviceFeePolicyId: string
+
+  matchedTierId?: string | null
+
+  appliedRate: number
+
+  serviceFee: number
+}
+
+
+==================================================
+三十八、ChannelMonthlySettlementSummary
+==================================================
+
+interface ChannelMonthlySettlementSummary {
+  channelId: string
+
+  year: number
+  month: number
+
+  currency: string
+
+  accountCount: number
+
+  mediaSpend: number
+
+  serviceFee: number
+
+  settlementCost: number
+}
+
+
+其中：
+
+settlementCost
+=
+mediaSpend + serviceFee
+
+
+注意：
+
+Settlement Cost
+
+属于渠道结算。
+
+
+不要在账户页面把它叫：
+
+“已花费”。
+
+
+==================================================
+三十九、Channel Prepayment
+==================================================
+
+业务确认：
+
+公司向渠道先打款。
+
+
+属于：
+
+预付款 / 充值。
+
+
+建立：
+
+interface ChannelPrepayment {
+  id: string
+
+  paymentNo: string
+
+  channelId: string
+
+  amount: number
+
+  currency: string
+
+  status:
+    | 'PENDING'
+    | 'CONFIRMED'
+    | 'CANCELLED'
+
+  paidAt?: string | null
+
+  confirmedAt?: string | null
+
+  note?: string | null
+
+  createdAt: string
+}
+
+
+==================================================
+四十、Channel Refund
+==================================================
+
+停止合作：
+
+如果预付款还有余额：
+
+渠道需要退款。
+
+
+建立：
+
+interface ChannelRefund {
+  id: string
+
+  refundNo: string
+
+  channelId: string
+
+  amount: number
+
+  currency: string
+
+  reason?: string | null
+
+  status:
+    | 'PENDING'
+    | 'CONFIRMED'
+    | 'REJECTED'
+    | 'CANCELLED'
+
+  requestedAt: string
+
+  confirmedAt?: string | null
+
+  note?: string | null
+
+  createdAt: string
+}
+
+
+退款必须是独立事实。
+
+不能只是：
+
+balance = 0。
+
+
+==================================================
+四十一、Finance当前边界
+==================================================
+
+Phase 1只建立：
+
+ChannelPrepayment
+ChannelRefund
+ServiceFeePolicy
+ServiceFeeTier
+Monthly Settlement Read Models
+
+
+不建立：
+
+正式Fund Ledger
+Payment Approval
+Refund Approval
+Bank Account
+USDT
+FX
+Reconciliation
+
+
+==================================================
+四十二、Team Demand
+==================================================
+
+建立：
+
+AccountDemand
+
+AccountDemandItem
+
+AccountDemandAllocation
+
+
+AccountDemand：
+
+id
+demandNo
+teamId
+requesterUserId
+expectedDate?
+priority
+reason?
+status
+createdAt
+updatedAt
+
+
+状态：
+
+DRAFT
+SUBMITTED
+APPROVED
+PARTIALLY_ALLOCATED
+FULFILLED
+REJECTED
+CANCELLED
+
+
+==================================================
+四十三、AccountDemandItem
+==================================================
+
+interface AccountDemandItem {
+  id: string
+
+  demandId: string
+
+  mediaId: string
+
+  productId?: string | null
+
+  requestedQuantity: number
+
+  approvedQuantity: number
+
+  requirements: Record<string, unknown>
+}
+
+
+requirements：
+
+用于未来媒体特定需求。
+
+例如：
+
+timezone。
+
+
+不要把Meta需求字段写入所有Media核心模型。
+
+
+==================================================
+四十四、AccountDemandAllocation
+==================================================
+
+interface AccountDemandAllocation {
+  id: string
+
+  demandItemId: string
+
+  accountId: string
+
+  assignmentId?: string | null
+
+  allocatedAt: string
+
+  allocatedBy: string
+}
+
+
+==================================================
+四十五、Channel Account Order
+==================================================
+
+建立Domain：
+
+ChannelAccountOrder
+
+
+至少：
+
+id
+orderNo
+
+channelId
+mediaId
+
+relatedDemandItemId?
+
+requestedQuantity
+deliveredQuantity
+
+timezone?
+
+requirements
+
+status
+
+requestedAt
+completedAt?
+
+
+暂时：
+
+不接真实 Telegram。
+
+
+会签补丁（Phase 15；与 plan.md §41 / §14 冲突时以 plan 为准）：
+
+必须增加 externalOrderNo（渠道 Bot「下户 ID」），与内部 orderNo 映射。
+relatedDemandItemId 必填。禁止无 Demand 的主动补库单。
+模拟 TG 询单履约 = STEP 18；真实 Bot = STEP 29。
+入库不等于分配。部分交付同一 Order 续交；超交进 Pool、不挂本 Demand。
+已交付不可撤回。AI/Bot 只出草稿，人工确认才入库。
+
+
+==================================================
+四十六、Alert
+==================================================
+
+建立通用：
+
+Alert
+
+
+id
+type
+severity
+
+entityType
+entityId
+
+title
+description
+
+status
+
+assigneeUserId?
+
+detectedAt
+resolvedAt?
+
+
+Alert未来可以关联：
+
+Account
+Team
+Channel
+Demand
+Platform Asset
+Credential
+Sync Job
+
+
+==================================================
+四十七、Account List Read Model
+==================================================
+
+建立：
+
+AdAccountListItem
+
+
+至少支持：
+
+id
+externalAccountId
+accountName
+
+media
+channel
+
+platformAsset
+
+timezone
+
+serviceFeePolicy
+
+product
+customer
+
+team
+member
+manager
+
+assetStatus
+mediaStatus
+apiAccessStatus
+
+spendLimit
+
+amountSpent
+remainingLimit
+
+todaySpend
+spend7d
+spend30d
+
+selectedPeriodSpend?
+
+lastSpendAt
+
+receivedAt
+
+note
+
+
+==================================================
+四十八、Account Query Model
+==================================================
+
+建立：
+
+AccountQuery
+
+
+支持：
+
+keyword
+
+mediaIds
+channelIds
+
+platformAssetIds
+
+timezone
+
+teamIds
+memberIds
+managerIds
+
+productOwnership
+productIds
+customerIds
+
+serviceFeePolicyIds
+
+assetStatuses
+mediaStatuses
+apiAccessStatuses
+
+spendLimitMin
+spendLimitMax
+
+amountSpentMin
+amountSpentMax
+
+remainingLimitMin
+remainingLimitMax
+
+spendRange
+
+periodSpendMin
+periodSpendMax
+
+lastSpendPreset
+
+hasNote
+
+receivedFrom
+receivedTo
+
+page
+pageSize
+
+sortBy
+sortOrder
+
+
+==================================================
+四十九、通用Query基础
+==================================================
+
+建立：
+
+PaginationQuery
+
+SortQuery
+
+PagedResponse<T>
+
+
+例如：
+
+interface PagedResponse<T> {
+  data: T[]
+
+  pagination: {
+    page: number
+    pageSize: number
+    total: number
+    totalPages: number
+  }
+}
+
+
+==================================================
+五十、Service Architecture
+==================================================
+
+正确：
+
+Page
+↓
+Component
+↓
+Composable
+↓
+Service Interface
+↓
+Mock Service
+
+
+未来：
+
+Service Interface
+↓
+API Service
+↓
+Nuxt Server API
+↓
+PostgreSQL
+
+
+禁止：
+
+Page直接依赖Mock Array。
+
+
+==================================================
+五十一、Services
+==================================================
+
+至少建立：
+
+MediaService
+
+AccountService
+
+AccountSpendService
+
+ChannelService
+
+TeamService
+
+ProductService
+
+DemandService
+
+AlertService
+
+ChannelSettlementService
+
+
+ServiceFeeCalculator可以独立：
+
+service / domain utility。
+
+
+==================================================
+五十二、AccountService
+==================================================
+
+至少：
+
+getAccounts(query)
+
+getAccountStats(query?)
+
+getAccountById(id)
+
+
+未来可以预留：
+
+assignAccount
+transferAccount
+recycleAccount
+changeProduct
+changeManager
+updateNote
+
+
+Phase 1无需真实Persistence。
+
+
+==================================================
+五十三、AccountSpendService
+==================================================
+
+至少：
+
+getAccountSpendMetrics(accountId)
+
+getAccountSpend(accountId, range)
+
+
+Mock必须从：
+
+AccountSpendDaily
+
+计算。
+
+
+==================================================
+五十四、MediaService
+==================================================
+
+至少：
+
+getMediaPlatforms()
+
+getPlatformAssetTypes(mediaId?)
+
+getPlatformAssets(...)
+
+
+禁止页面重新写死Media。
+
+
+==================================================
+五十五、Mock Dataset
+==================================================
+
+建立集中Mock数据。
+
+
+至少：
+
+4 Media
+
+3 Channel
+
+3 Team
+
+多个Member
+
+多个Account Manager
+
+Internal Products
+
+External Products
+
+Customers
+
+Platform Assets
+
+Accounts
+
+Assignments
+
+Spend Daily
+
+Service Fee Policies
+
+Service Fee Tiers
+
+Demand
+
+Alerts
+
+
+==================================================
+五十六、Mock Spend要求
+==================================================
+
+至少模拟：
+
+60-90天AccountSpendDaily。
+
+
+保证：
+
+Today
+7D
+30D
+Custom
+Lifetime
+
+可以真实聚合。
+
+
+不要手工创建互相矛盾的：
+
+todaySpend
+spend7d
+spend30d。
+
+
+==================================================
+五十七、Mock Settlement案例
+==================================================
+
+必须包含：
+
+
+Account A：
+
+September Media Spend：
+
+20,000
+
+
+Policy：
+
+0-10k → 2%
+10k-50k → 1.5%
+50k+ → 1%
+
+
+Result：
+
+Rate：
+1.5%
+
+Service Fee：
+300
+
+
+Account B：
+
+September Spend：
+
+8,000
+
+
+Rate：
+
+2%
+
+
+Service Fee：
+
+160
+
+
+Channel：
+
+Media Spend：
+
+28,000
+
+
+Service Fee：
+
+460
+
+
+Settlement Cost：
+
+28,460
+
+
+==================================================
+五十八、Money Precision
+==================================================
+
+Phase 1：
+
+允许使用JavaScript number。
+
+
+但必须记录Technical Debt：
+
+真实数据库 / Finance阶段：
+
+金额使用PostgreSQL NUMERIC。
+
+
+正式结算：
+
+不得依赖JavaScript Floating Point作为最终账务计算。
+
+
+不要当前安装Decimal Library。
+
+
+==================================================
+五十九、Filter Foundation
+==================================================
+
+建立轻量基础：
+
+EntitySearch
+
+QuickFilter
+
+AdvancedFilterDrawer
+
+ActiveFilterChips
+
+
+未来支持：
+
+String
+
+Multi Select
+
+Number Range
+
+Date Range
+
+Boolean
+
+
+不要建立复杂：
+
+AND / OR Query Builder。
+
+
+==================================================
+六十、Filter URL同步
+==================================================
+
+建立：
+
+useAccountFilters
+
+或通用Query Filter composable。
+
+
+要求：
+
+Filter
+↔
+Route Query
+
+
+刷新：
+
+筛选不丢。
+
+
+Filter改变：
+
+Page回到1。
+
+
+==================================================
+六十一、Server-side思维
+==================================================
+
+虽然现在Mock：
+
+页面必须调用：
+
+getAccounts(AccountQuery)
+
+
+返回：
+
+PagedResponse
+
+
+禁止页面：
+
+getAllAccounts()
+→ filter()
+
+
+Mock Service内部：
+
+可以Array.filter。
+
+
+==================================================
+六十二、Account Search语义
+==================================================
+
+keyword未来支持：
+
+Account ID
+Account Name
+Platform Asset External ID
+
+
+因此：
+
+可以通过BM ID搜索Account。
+
+
+==================================================
+六十三、Phase 2表格设计预留
+==================================================
+
+账户中心未来不是把全部金额列铺满。
+
+
+建议：
+
+固定：
+
+Spend Limit
+Amount Spent
+Remaining Limit
+
+
+动态：
+
+Period Spend
+
+
+Period Selector：
+
+Today
+7D
+30D
+Custom
+
+
+例如：
+
+已花费     剩余额度     [近7日 ▼] 消耗
+
+20,000     30,000          4,200
+
+
+而不是同时铺：
+
+今日
+7D
+30D
+Custom
+
+四列。
+
+
+==================================================
+六十四、Account Note筛选
+==================================================
+
+AccountQuery支持：
+
+hasNote
+
+
+未来：
+
+快速筛选：
+
+有备注。
+
+
+==================================================
+六十五、目录目标
+==================================================
+
+推荐：
+
+app/
+  domain/
+    common.ts
+    media.ts
+    channel.ts
+    account.ts
+    organization.ts
+    product.ts
+    demand.ts
+    alert.ts
+    channel-order.ts
+    finance.ts
+
+  services/
+    media/
+    accounts/
+    channels/
+    teams/
+    products/
+    demands/
+    alerts/
+    settlement/
+
+  mocks/
+
+  composables/
+
+  components/
+    common/
+    filters/
+
+
+具体目录可适应现有项目。
+
+
+不要建立过度Clean Architecture。
+
+
+==================================================
+六十六、旧代码兼容
+==================================================
+
+Phase 0存在：
+
+type Media = Meta | Google | TikTok
+
+旧Account.productType
+
+旧Recharge
+旧Reconciliation
+
+
+策略：
+
+不破坏性删除。
+
+
+新的Domain禁止继续使用旧设计。
+
+
+旧页面可以暂时：
+
+Compatibility Layer。
+
+
+后续各Phase逐步迁移。
+
+
+==================================================
+六十七、导航修复
+==================================================
+
+允许修复：
+
+Dashboard +
+
+指向：
+
+/settings/members
+/settings/notifications
+/settings/security
+
+等旧死入口。
+
+
+但：
+
+不要删除旧文件。
+
+
+==================================================
+六十八、Phase 1开发顺序
+==================================================
+
+必须按照：
+
+1. Domain Types
+
+2. Dynamic Media
+
+3. Platform Asset
+
+4. Product / Customer
+
+5. Account + Relations
+
+6. Spend Model
+
+7. Service Fee Policy
+
+8. Settlement Read Model
+
+9. Demand / Alert / Channel Order
+
+10. Query Models
+
+11. Mock Dataset
+
+12. Spend Aggregation
+
+13. Fee Calculator
+
+14. Service Interfaces
+
+15. Mock Services
+
+16. Composables
+
+17. Filter Foundation
+
+18. Navigation Fixes
+
+19. Typecheck
+
+20. Build
+
+
+不要先重构：
+
+accounts.vue。
+
+
+==================================================
+六十九、Phase 1核心验收案例
+==================================================
+
+CASE A — 动态媒体
+
+增加：
+
+Snapchat
+
+
+AdAccount无需改Type。
+
+
+CASE B — Platform Asset
+
+Meta：
+
+BM ID 123456
+
+
+Google：
+
+MCC ID 789012
+
+
+使用同一个：
+
+PlatformAsset。
+
+
+CASE C — Product
+
+Product A：
+
+INTERNAL
+
+
+Alpha Shop：
+
+EXTERNAL
+Customer Alpha
+
+
+不经过ProductCategory。
+
+
+CASE D — Account责任
+
+Member：
+
+张三
+
+
+Manager：
+
+李四
+
+
+允许不同。
+
+
+CASE E — Spend
+
+Spend Limit：
+
+50,000
+
+
+Lifetime Media Spend：
+
+20,000
+
+
+Remaining：
+
+30,000
+
+
+Today：
+
+350
+
+
+7D：
+
+4,200
+
+
+30D：
+
+15,000
+
+
+自定义Period：
+
+由Daily Spend聚合。
+
+
+CASE F — Service Fee
+
+Month Spend：
+
+20,000
+
+
+Rate：
+
+1.5%
+
+
+Service Fee：
+
+300
+
+
+账户“已花费”仍然：
+
+20,000
+
+
+不是：
+
+20,300。
+
+
+CASE G — Settlement
+
+Channel：
+
+Media Spend：
+
+28,000
+
+
+Service Fee：
+
+460
+
+
+Settlement Cost：
+
+28,460。
+
+
+CASE H — Note
+
+Account：
+
+note存在。
+
+
+Note：
+
+不改变账户状态。
+
+
+==================================================
+七十、Phase 1 Completion Criteria
+==================================================
+
+完成必须满足：
+
+动态Media
+✓
+
+Platform Asset
+✓
+
+BM/MCC/BC通用模型
+✓
+
+Product直接INTERNAL/EXTERNAL
+✓
+
+Customer
+✓
+
+Member / Manager分离
+✓
+
+Account Note
+✓
+
+Account Relations History
+✓
+
+Spend Daily
+✓
+
+Spend Limit
+✓
+
+Amount Spent = Lifetime Media Spend
+✓
+
+Remaining Limit
+✓
+
+Today / 7D / 30D
+✓
+
+Custom Date Spend
+✓
+
+Account Fee Policy
+✓
+
+NON_PROGRESSIVE Tier
+✓
+
+Monthly Account Service Fee
+✓
+
+Channel Monthly Settlement
+✓
+
+Prepayment Domain
+✓
+
+Refund Domain
+✓
+
+Demand Domain
+✓
+
+Alert Domain
+✓
+
+Channel Order Domain
+✓
+
+Query Models
+✓
+
+Mock Services
+✓
+
+No Database
+✓
+
+
+==================================================
+七十一、执行要求
+==================================================
+
+开始写代码前：
+
+先输出：
+
+# Phase 1 Implementation Plan
+
+
+包括：
+
+Files To Add
+
+Files To Modify
+
+Files To Keep Untouched
+
+Domain Dependency Graph
+
+Mock Dataset Strategy
+
+Spend Aggregation Strategy
+
+Service Fee Calculation Strategy
+
+Compatibility Strategy
+
+Potential Risks
+
+
+如果需要：
+
+新增依赖
+删除旧页面
+改变Nuxt UI
+改变路由架构
+大改Dashboard
+
+
+停止并说明。
+
+不得自行执行。
+
+
+其余Phase 1范围内合理修改：
+
+可以直接执行。
+
+
+==================================================
+七十二、完成后报告
+==================================================
+
+完成后输出：
+
+# Phase 1 Completed
+
+
+## Domain Models
+
+## Spend Architecture
+
+## Service Fee Architecture
+
+## Settlement Architecture
+
+## Mock Dataset
+
+## Services
+
+## Query Infrastructure
+
+## Filter Foundation
+
+## Compatibility
+
+## Navigation Fixes
+
+## Typecheck
+
+## Build
+
+## Technical Debt
+
+## Remaining Legacy Pages
+
+
+最后输出：
+
+# Proposed Phase 2 Plan
+
+Phase 2目标：
+
+Account Center — All Accounts
+
+
+只给Plan。
+
+
+不要自行开始Phase 2。

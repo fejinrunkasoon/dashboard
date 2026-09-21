@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { NavigationMenuItem } from '@nuxt/ui'
+import { alertService } from '~/services'
 
 const route = useRoute()
 
@@ -7,7 +8,15 @@ const open = ref(false)
 
 const close = () => { open.value = false }
 
-const links = [[{
+const openAlertCount = ref(0)
+
+try {
+  openAlertCount.value = await alertService.getOpenCount()
+} catch {
+  openAlertCount.value = 0
+}
+
+const links = computed(() => [[{
   label: '运营总览',
   icon: 'i-lucide-layout-dashboard',
   to: '/',
@@ -31,18 +40,22 @@ const links = [[{
   label: '预警与待办',
   icon: 'i-lucide-bell-ring',
   to: '/alerts',
-  badge: '5',
+  badge: openAlertCount.value > 0 ? String(openAlertCount.value) : undefined,
   onSelect: close
 }, {
   label: '系统管理',
   to: '/settings',
   icon: 'i-lucide-settings',
   defaultOpen: true,
-  type: 'trigger',
+  type: 'trigger' as const,
   children: [{
     label: '数据接入',
     to: '/settings',
     exact: true,
+    onSelect: close
+  }, {
+    label: '媒体同步',
+    to: '/settings/sync',
     onSelect: close
   }, {
     label: '产品与客户',
@@ -67,11 +80,11 @@ const links = [[{
   }, {
     label: '日志中心',
     icon: 'i-lucide-file-text',
-    type: 'trigger',
+    type: 'trigger' as const,
     defaultOpen: true,
     children: [{
       label: '操作日志',
-      to: '/settings/logs/operation',
+      to: '/settings/logs/operations',
       onSelect: close
     }, {
       label: '同步日志',
@@ -84,12 +97,12 @@ const links = [[{
   icon: 'i-lucide-info',
   to: 'https://github.com/nuxt-ui-templates/dashboard',
   target: '_blank'
-}]] satisfies NavigationMenuItem[][]
+}]] satisfies NavigationMenuItem[][])
 
 const groups = computed(() => [{
   id: 'links',
   label: '跳转到',
-  items: links.flat()
+  items: links.value.flat()
 }, {
   id: 'code',
   label: '代码',

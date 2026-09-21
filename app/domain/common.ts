@@ -53,6 +53,9 @@ export interface SpendDateRange {
   to: string
 }
 
+/** Shared spend / analytics period presets (CUSTOM requires SpendDateRange). */
+export type SpendPeriodPreset = 'TODAY' | '7D' | '30D' | 'CUSTOM'
+
 export function paginate<T>(
   items: T[],
   page = 1,

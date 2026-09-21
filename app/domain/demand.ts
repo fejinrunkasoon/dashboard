@@ -45,6 +45,10 @@ export interface DemandQuery {
   keyword?: string
   teamIds?: string[]
   statuses?: AccountDemandStatus[]
+  priorities?: DemandPriority[]
+  /** OVERDUE / WITHIN_7D / UNSET relative to mock today */
+  expectedBucket?: 'OVERDUE' | 'WITHIN_7D' | 'UNSET'
+  mediaId?: string
   page?: number
   pageSize?: number
 }

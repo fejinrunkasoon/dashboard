@@ -45,8 +45,17 @@ function septemberSpend(accountId: string, total: number): AccountSpendDaily[] {
 }
 
 function generatedSpend(accountId: string, seed: number): AccountSpendDaily[] {
+  const account = accounts.find(item => item.id === accountId)
   const from = shiftDate(MOCK_TODAY, -74)
   return enumerateDates(from, MOCK_TODAY).map((date, index) => {
+    // Keep Channel Alpha September spend exclusive to fee case accounts A/B (CASE G).
+    if (
+      account?.sourceChannelId === 'ch-alpha'
+      && date >= '2026-09-01'
+      && date <= '2026-09-30'
+    ) {
+      return { accountId, date, currency: DEFAULT_CURRENCY, spend: 0 }
+    }
     const r = seeded(seed * 97 + index)
     const spend = r > 0.18 ? Math.round(40 + r * 420) : 0
     return { accountId, date, currency: DEFAULT_CURRENCY, spend }

@@ -11,7 +11,20 @@ import type { Alert } from '../domain/alert'
 import type { Channel } from '../domain/channel'
 import type { ChannelAccountOrder } from '../domain/channel-order'
 import type { AccountDemand, AccountDemandAllocation, AccountDemandItem } from '../domain/demand'
-import type { ChannelPrepayment, ChannelRefund, ServiceFeePolicy, ServiceFeeTier } from '../domain/finance'
+import type {
+  ChannelPaymentAddress,
+  ChannelPrepayment,
+  ChannelRefund,
+  ChannelReconciliation,
+  ServiceFeePolicy,
+  ServiceFeeTier
+} from '../domain/finance'
+import type {
+  MediaConnectorBinding,
+  MediaCredential,
+  MediaFieldDefinition,
+  SyncScopeConfig
+} from '../domain/connector'
 import type { MediaPlatform, PlatformAsset, PlatformAssetType } from '../domain/media'
 import type { Member, Team } from '../domain/organization'
 import type { Customer, Product } from '../domain/product'
@@ -30,10 +43,10 @@ export const mediaPlatforms: MediaPlatform[] = [
 ]
 
 export const platformAssetTypes: PlatformAssetType[] = [
-  { id: 'pat-meta-bm', mediaId: 'media-meta', code: 'BUSINESS_MANAGER', name: 'BM' },
-  { id: 'pat-google-mcc', mediaId: 'media-google', code: 'MANAGER_ACCOUNT', name: 'MCC' },
-  { id: 'pat-tiktok-bc', mediaId: 'media-tiktok', code: 'BUSINESS_CENTER', name: 'Business Center' },
-  { id: 'pat-snap-org', mediaId: 'media-snapchat', code: 'ORGANIZATION', name: 'Organization' }
+  { id: 'pat-meta-bm', mediaId: 'media-meta', code: 'BUSINESS_MANAGER', name: 'BM', status: 'ACTIVE' },
+  { id: 'pat-google-mcc', mediaId: 'media-google', code: 'MANAGER_ACCOUNT', name: 'MCC', status: 'ACTIVE' },
+  { id: 'pat-tiktok-bc', mediaId: 'media-tiktok', code: 'BUSINESS_CENTER', name: 'Business Center', status: 'ACTIVE' },
+  { id: 'pat-snap-org', mediaId: 'media-snapchat', code: 'ORGANIZATION', name: 'Organization', status: 'ACTIVE' }
 ]
 
 export const channels: Channel[] = [
@@ -186,6 +199,16 @@ export const serviceFeePolicies: ServiceFeePolicy[] = [
     effectiveFrom: '2026-01-01',
     effectiveTo: null,
     note: null
+  },
+  {
+    id: 'sfp-alpha-promo',
+    channelId: 'ch-alpha',
+    code: 'ALPHA_PROMO',
+    name: 'Alpha Promo 1.2%',
+    status: 'ACTIVE',
+    effectiveFrom: '2026-09-01',
+    effectiveTo: null,
+    note: 'Alternate ACTIVE policy for rebind demos'
   }
 ]
 
@@ -193,7 +216,8 @@ export const serviceFeeTiers: ServiceFeeTier[] = [
   { id: 'tier-alpha-1', policyId: 'sfp-alpha-std', minSpend: 0, maxSpend: 10000, rate: 0.02, sortOrder: 1 },
   { id: 'tier-alpha-2', policyId: 'sfp-alpha-std', minSpend: 10000, maxSpend: 50000, rate: 0.015, sortOrder: 2 },
   { id: 'tier-alpha-3', policyId: 'sfp-alpha-std', minSpend: 50000, maxSpend: null, rate: 0.01, sortOrder: 3 },
-  { id: 'tier-beta-1', policyId: 'sfp-beta-flat', minSpend: 0, maxSpend: null, rate: 0.02, sortOrder: 1 }
+  { id: 'tier-beta-1', policyId: 'sfp-beta-flat', minSpend: 0, maxSpend: null, rate: 0.02, sortOrder: 1 },
+  { id: 'tier-alpha-promo-1', policyId: 'sfp-alpha-promo', minSpend: 0, maxSpend: null, rate: 0.012, sortOrder: 1 }
 ]
 
 function account(partial: AdAccount): AdAccount {
@@ -207,7 +231,7 @@ export const accounts: AdAccount[] = [
     name: 'Spend Demo Account',
     mediaId: 'media-meta',
     sourceChannelId: 'ch-beta',
-    timezone: 'America/New_York',
+    timezone: 'GMT-5',
     spendLimit: 50000,
     serviceFeePolicyId: 'sfp-beta-flat',
     assetStatus: 'IN_USE',
@@ -225,7 +249,7 @@ export const accounts: AdAccount[] = [
     name: 'Fee Case A',
     mediaId: 'media-meta',
     sourceChannelId: 'ch-alpha',
-    timezone: 'Asia/Shanghai',
+    timezone: 'GMT+8',
     spendLimit: 80000,
     serviceFeePolicyId: 'sfp-alpha-std',
     assetStatus: 'IN_USE',
@@ -243,7 +267,7 @@ export const accounts: AdAccount[] = [
     name: 'Fee Case B',
     mediaId: 'media-google',
     sourceChannelId: 'ch-alpha',
-    timezone: 'Asia/Shanghai',
+    timezone: 'GMT+8',
     spendLimit: null,
     serviceFeePolicyId: 'sfp-alpha-std',
     assetStatus: 'IN_USE',
@@ -261,7 +285,7 @@ export const accounts: AdAccount[] = [
     name: 'Member Manager Split',
     mediaId: 'media-meta',
     sourceChannelId: 'ch-alpha',
-    timezone: 'America/Los_Angeles',
+    timezone: 'GMT-8',
     spendLimit: 40000,
     serviceFeePolicyId: 'sfp-alpha-std',
     assetStatus: 'ASSIGNED',
@@ -279,7 +303,7 @@ export const accounts: AdAccount[] = [
     name: 'Snapchat Probe',
     mediaId: 'media-snapchat',
     sourceChannelId: 'ch-beta',
-    timezone: 'America/Los_Angeles',
+    timezone: 'GMT-8',
     spendLimit: 10000,
     serviceFeePolicyId: 'sfp-beta-flat',
     assetStatus: 'AVAILABLE',
@@ -297,7 +321,7 @@ export const accounts: AdAccount[] = [
     name: 'Idle Meta',
     mediaId: 'media-meta',
     sourceChannelId: 'ch-beta',
-    timezone: 'Europe/London',
+    timezone: 'GMT+0',
     spendLimit: 20000,
     serviceFeePolicyId: 'sfp-beta-flat',
     assetStatus: 'IDLE',
@@ -315,7 +339,7 @@ export const accounts: AdAccount[] = [
     name: 'TikTok In Use',
     mediaId: 'media-tiktok',
     sourceChannelId: 'ch-gamma',
-    timezone: 'Asia/Singapore',
+    timezone: 'GMT+8',
     spendLimit: 25000,
     serviceFeePolicyId: null,
     assetStatus: 'IN_USE',
@@ -333,7 +357,7 @@ export const accounts: AdAccount[] = [
     name: 'Banned Meta',
     mediaId: 'media-meta',
     sourceChannelId: 'ch-alpha',
-    timezone: 'Asia/Shanghai',
+    timezone: 'GMT+8',
     spendLimit: 15000,
     serviceFeePolicyId: 'sfp-alpha-std',
     assetStatus: 'DISABLED',
@@ -342,6 +366,97 @@ export const accounts: AdAccount[] = [
     receivedAt: '2026-04-12',
     firstSeenAt: '2026-04-12T00:00:00.000Z',
     lastSyncAt: '2026-09-08T08:00:00.000Z',
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  }),
+  // Phase 4 — Account Pool inventory (AVAILABLE, no current assignment)
+  account({
+    id: 'acc-pool-meta-1',
+    externalAccountId: 'act_800001',
+    name: 'Pool Meta NY',
+    mediaId: 'media-meta',
+    sourceChannelId: 'ch-alpha',
+    timezone: 'GMT-5',
+    spendLimit: 30000,
+    serviceFeePolicyId: 'sfp-alpha-std',
+    assetStatus: 'AVAILABLE',
+    mediaStatus: 'ACTIVE',
+    note: null,
+    receivedAt: '2026-09-05',
+    firstSeenAt: '2026-09-05T00:00:00.000Z',
+    lastSyncAt: '2026-09-16T08:00:00.000Z',
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  }),
+  account({
+    id: 'acc-pool-meta-2',
+    externalAccountId: 'act_800002',
+    name: 'Pool Meta SH',
+    mediaId: 'media-meta',
+    sourceChannelId: 'ch-beta',
+    timezone: 'GMT+8',
+    spendLimit: 20000,
+    serviceFeePolicyId: 'sfp-beta-flat',
+    assetStatus: 'AVAILABLE',
+    mediaStatus: 'ACTIVE',
+    note: null,
+    receivedAt: '2026-09-08',
+    firstSeenAt: '2026-09-08T00:00:00.000Z',
+    lastSyncAt: '2026-09-16T08:00:00.000Z',
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  }),
+  account({
+    id: 'acc-pool-google-1',
+    externalAccountId: 'g_800003',
+    name: 'Pool Google SG',
+    mediaId: 'media-google',
+    sourceChannelId: 'ch-gamma',
+    timezone: 'GMT+8',
+    spendLimit: 25000,
+    serviceFeePolicyId: null,
+    assetStatus: 'AVAILABLE',
+    mediaStatus: 'ACTIVE',
+    note: null,
+    receivedAt: '2026-09-10',
+    firstSeenAt: '2026-09-10T00:00:00.000Z',
+    lastSyncAt: '2026-09-16T08:00:00.000Z',
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  }),
+  account({
+    id: 'acc-pool-tiktok-1',
+    externalAccountId: 'tt_800004',
+    name: 'Pool TikTok LA',
+    mediaId: 'media-tiktok',
+    sourceChannelId: 'ch-gamma',
+    timezone: 'GMT-8',
+    spendLimit: 15000,
+    serviceFeePolicyId: null,
+    assetStatus: 'AVAILABLE',
+    mediaStatus: 'ACTIVE',
+    note: null,
+    receivedAt: '2026-09-12',
+    firstSeenAt: '2026-09-12T00:00:00.000Z',
+    lastSyncAt: '2026-09-16T08:00:00.000Z',
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  }),
+  account({
+    id: 'acc-pool-snap-2',
+    externalAccountId: 'snap_800005',
+    name: 'Pool Snapchat LA',
+    mediaId: 'media-snapchat',
+    sourceChannelId: 'ch-beta',
+    timezone: 'GMT-8',
+    spendLimit: 12000,
+    serviceFeePolicyId: 'sfp-beta-flat',
+    assetStatus: 'AVAILABLE',
+    mediaStatus: 'ACTIVE',
+    note: null,
+    receivedAt: '2026-09-14',
+    firstSeenAt: '2026-09-14T00:00:00.000Z',
+    lastSyncAt: '2026-09-16T08:00:00.000Z',
     createdAt: ts.created,
     updatedAt: ts.updated
   })
@@ -355,7 +470,12 @@ export const accountApiAccess: Record<string, ApiAccessStatus> = {
   'acc-snap-1': 'ACCESSIBLE',
   'acc-idle-1': 'LOST',
   'acc-tiktok-1': 'ACCESSIBLE',
-  'acc-banned-1': 'LOST'
+  'acc-banned-1': 'LOST',
+  'acc-pool-meta-1': 'LOST',
+  'acc-pool-meta-2': 'ACCESSIBLE',
+  'acc-pool-google-1': 'ACCESSIBLE',
+  'acc-pool-tiktok-1': 'ACCESSIBLE',
+  'acc-pool-snap-2': 'ACCESSIBLE'
 }
 
 export const accountAssignments: AccountAssignment[] = [
@@ -428,6 +548,17 @@ export const accountAssignments: AccountAssignment[] = [
     endedAt: null,
     reason: null,
     createdBy: 'mem-sunhao'
+  },
+  // Phase 5 — Ban Rate demo: banned account still under team current assignment
+  {
+    id: 'asg-banned-1',
+    accountId: 'acc-banned-1',
+    teamId: 'team-a',
+    memberId: 'mem-lisi',
+    startedAt: '2026-04-12T00:00:00.000Z',
+    endedAt: null,
+    reason: 'Banned while assigned',
+    createdBy: 'mem-wangwu'
   }
 ]
 
@@ -617,6 +748,51 @@ export const accountPlatformAssetAssignments: AccountPlatformAssetAssignment[] =
     endedAt: null,
     reason: null,
     createdBy: 'mem-lisi'
+  },
+  {
+    id: 'paa-pool-meta-1',
+    accountId: 'acc-pool-meta-1',
+    platformAssetId: 'pa-meta-123456',
+    startedAt: '2026-09-05T00:00:00.000Z',
+    endedAt: null,
+    reason: 'Pool stock',
+    createdBy: 'mem-lisi'
+  },
+  {
+    id: 'paa-pool-meta-2',
+    accountId: 'acc-pool-meta-2',
+    platformAssetId: 'pa-meta-555000',
+    startedAt: '2026-09-08T00:00:00.000Z',
+    endedAt: null,
+    reason: 'Pool stock',
+    createdBy: 'mem-lisi'
+  },
+  {
+    id: 'paa-pool-google-1',
+    accountId: 'acc-pool-google-1',
+    platformAssetId: 'pa-google-789012',
+    startedAt: '2026-09-10T00:00:00.000Z',
+    endedAt: null,
+    reason: 'Pool stock',
+    createdBy: 'mem-lisi'
+  },
+  {
+    id: 'paa-pool-tiktok-1',
+    accountId: 'acc-pool-tiktok-1',
+    platformAssetId: 'pa-tiktok-bc1',
+    startedAt: '2026-09-12T00:00:00.000Z',
+    endedAt: null,
+    reason: 'Pool stock',
+    createdBy: 'mem-zhouxin'
+  },
+  {
+    id: 'paa-pool-snap-2',
+    accountId: 'acc-pool-snap-2',
+    platformAssetId: 'pa-snap-org1',
+    startedAt: '2026-09-14T00:00:00.000Z',
+    endedAt: null,
+    reason: 'Pool stock',
+    createdBy: 'mem-chenming'
   }
 ]
 
@@ -663,6 +839,18 @@ export const demands: AccountDemand[] = [
     status: 'APPROVED',
     createdAt: '2026-09-12T00:00:00.000Z',
     updatedAt: '2026-09-13T00:00:00.000Z'
+  },
+  {
+    id: 'dmd-003',
+    demandNo: 'DM-202609-003',
+    teamId: 'team-a',
+    requesterUserId: 'mem-lisi',
+    expectedDate: '2026-09-22',
+    priority: 'NORMAL',
+    reason: '待负责人审批',
+    status: 'SUBMITTED',
+    createdAt: '2026-09-15T00:00:00.000Z',
+    updatedAt: '2026-09-15T00:00:00.000Z'
   }
 ]
 
@@ -674,7 +862,7 @@ export const demandItems: AccountDemandItem[] = [
     productId: 'prd-app-a',
     requestedQuantity: 5,
     approvedQuantity: 3,
-    requirements: { timezone: 'America/New_York' }
+    requirements: { timezone: 'GMT-5' }
   },
   {
     id: 'dmdi-002',
@@ -683,7 +871,16 @@ export const demandItems: AccountDemandItem[] = [
     productId: 'prd-app-b',
     requestedQuantity: 2,
     approvedQuantity: 2,
-    requirements: { timezone: 'America/Los_Angeles' }
+    requirements: { timezone: 'GMT-8' }
+  },
+  {
+    id: 'dmdi-003',
+    demandId: 'dmd-003',
+    mediaId: 'media-meta',
+    productId: 'prd-app-a',
+    requestedQuantity: 2,
+    approvedQuantity: 0,
+    requirements: { timezone: 'GMT-5' }
   }
 ]
 
@@ -702,15 +899,61 @@ export const channelAccountOrders: ChannelAccountOrder[] = [
   {
     id: 'ord-001',
     orderNo: 'CO-202609-001',
+    externalOrderNo: '827',
     channelId: 'ch-beta',
     mediaId: 'media-snapchat',
     relatedDemandItemId: 'dmdi-002',
     requestedQuantity: 2,
     deliveredQuantity: 1,
-    timezone: 'America/Los_Angeles',
-    requirements: { timezone: 'America/Los_Angeles' },
-    status: 'PARTIALLY_DELIVERED',
+    timezone: 'GMT-8',
+    requirements: { timezone: 'GMT-8' },
+    status: 'PARTIAL_DELIVERED',
+    partialReminderTime: '10:00',
+    inquiryMessageId: 'tg-msg-seed-001',
+    acceptedAt: '2026-09-13T01:00:00.000Z',
+    acceptedBy: 'supplier-bot',
+    rejectReason: null,
     requestedAt: '2026-09-13T00:00:00.000Z',
+    completedAt: null
+  },
+  {
+    id: 'ord-002',
+    orderNo: 'CO-202609-002',
+    externalOrderNo: '901',
+    channelId: 'ch-alpha',
+    mediaId: 'media-meta',
+    relatedDemandItemId: 'dmdi-001',
+    requestedQuantity: 3,
+    deliveredQuantity: 0,
+    timezone: 'GMT-5',
+    requirements: { timezone: 'GMT-5' },
+    status: 'PENDING',
+    partialReminderTime: null,
+    inquiryMessageId: null,
+    acceptedAt: null,
+    acceptedBy: null,
+    rejectReason: null,
+    requestedAt: '2026-09-15T00:00:00.000Z',
+    completedAt: null
+  },
+  {
+    id: 'ord-003',
+    orderNo: 'CO-202609-003',
+    externalOrderNo: '910',
+    channelId: 'ch-alpha',
+    mediaId: 'media-meta',
+    relatedDemandItemId: 'dmdi-001',
+    requestedQuantity: 7,
+    deliveredQuantity: 0,
+    timezone: 'GMT+7',
+    requirements: { timezone: 'GMT+7', type: '外接', need: '加白', product: 'WJ-3' },
+    status: 'PENDING_CONFIRM',
+    partialReminderTime: null,
+    inquiryMessageId: 'tg-msg-seed-003',
+    acceptedAt: null,
+    acceptedBy: null,
+    rejectReason: null,
+    requestedAt: '2026-09-17T00:00:00.000Z',
     completedAt: null
   }
 ]
@@ -727,7 +970,12 @@ export const alerts: Alert[] = [
     status: 'OPEN',
     assigneeUserId: null,
     detectedAt: '2026-09-08T04:00:00.000Z',
-    resolvedAt: null
+    resolvedAt: null,
+    relatedDemandId: null,
+    relatedDemandItemId: null,
+    relatedChannelOrderId: null,
+    relatedTeamId: null,
+    resolutionNote: null
   },
   {
     id: 'al-002',
@@ -737,10 +985,15 @@ export const alerts: Alert[] = [
     entityId: 'acc-idle-1',
     title: '48小时无消耗',
     description: 'Idle Meta 已超过48小时无消耗。',
-    status: 'ACKNOWLEDGED',
+    status: 'IN_PROGRESS',
     assigneeUserId: 'mem-sunhao',
     detectedAt: '2026-09-14T00:00:00.000Z',
-    resolvedAt: null
+    resolvedAt: null,
+    relatedDemandId: null,
+    relatedDemandItemId: null,
+    relatedChannelOrderId: null,
+    relatedTeamId: null,
+    resolutionNote: null
   },
   {
     id: 'al-003',
@@ -748,20 +1001,143 @@ export const alerts: Alert[] = [
     severity: 'WARNING',
     entityType: 'AccountDemand',
     entityId: 'dmd-002',
-    title: '库存不足',
-    description: 'Snapchat 库存无法满足 Team C 需求。',
+    title: '账户池库存不足',
+    description: 'Snapchat 库存无法满足 Team C 需求 DM-202609-002（Shortage 2）。',
     status: 'IN_PROGRESS',
     assigneeUserId: 'mem-lisi',
     detectedAt: '2026-09-13T02:00:00.000Z',
-    resolvedAt: null
+    resolvedAt: null,
+    relatedDemandId: 'dmd-002',
+    relatedDemandItemId: 'dmdi-002',
+    relatedChannelOrderId: 'ord-001',
+    relatedTeamId: 'team-c',
+    resolutionNote: null
+  },
+  {
+    id: 'al-004',
+    type: 'TEAM_ACCOUNT_SHORTAGE',
+    severity: 'WARNING',
+    entityType: 'Team',
+    entityId: 'team-a',
+    title: '团队账户不足',
+    description: 'Team A 需求 DM-202609-001 Meta 仍有 Shortage，需继续分配或补库。',
+    status: 'OPEN',
+    assigneeUserId: null,
+    detectedAt: '2026-09-14T06:00:00.000Z',
+    resolvedAt: null,
+    relatedDemandId: 'dmd-001',
+    relatedDemandItemId: 'dmdi-001',
+    relatedChannelOrderId: null,
+    relatedTeamId: 'team-a',
+    resolutionNote: null
+  },
+  {
+    id: 'al-005',
+    type: 'DEMAND_OVERDUE',
+    severity: 'INFO',
+    entityType: 'AccountDemand',
+    entityId: 'dmd-002',
+    title: '需求逾期',
+    description: 'DM-202609-002 期望交付日已过，仍未完全满足。',
+    status: 'OPEN',
+    assigneeUserId: null,
+    detectedAt: '2026-09-19T00:00:00.000Z',
+    resolvedAt: null,
+    relatedDemandId: 'dmd-002',
+    relatedDemandItemId: 'dmdi-002',
+    relatedChannelOrderId: null,
+    relatedTeamId: 'team-c',
+    resolutionNote: null
   }
 ]
+
+export const channelPaymentAddresses: ChannelPaymentAddress[] = [
+  {
+    id: 'cpa-alpha-usdt',
+    channelId: 'ch-alpha',
+    type: 'CRYPTO',
+    label: 'USDT-TRC20',
+    addressPayload: 'TXyzAlpha7kQp9mNv2wR8sHd4jLf6uBc1e',
+    status: 'ACTIVE',
+    approverTeamId: 'team-a',
+    submittedByMemberId: 'mem-lisi',
+    reviewedByMemberId: 'mem-wangwu',
+    reviewedAt: ts.created,
+    reviewNote: null,
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  },
+  {
+    id: 'cpa-alpha-bank',
+    channelId: 'ch-alpha',
+    type: 'FIAT',
+    label: '对公户 USD',
+    addressPayload: 'Bank of HK · ****8891 · Alpha Media Ltd',
+    status: 'ACTIVE',
+    approverTeamId: 'team-a',
+    submittedByMemberId: 'mem-lisi',
+    reviewedByMemberId: 'mem-wangwu',
+    reviewedAt: ts.created,
+    reviewNote: null,
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  },
+  {
+    id: 'cpa-beta-usdt',
+    channelId: 'ch-beta',
+    type: 'CRYPTO',
+    label: 'USDT-ERC20',
+    addressPayload: '0xBetaAa11Bb22Cc33Dd44Ee55Ff6677889900AaBb',
+    status: 'ACTIVE',
+    approverTeamId: 'team-b',
+    submittedByMemberId: 'mem-lisi',
+    reviewedByMemberId: 'mem-zhaolei',
+    reviewedAt: ts.created,
+    reviewNote: null,
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  },
+  {
+    id: 'cpa-gamma-bank',
+    channelId: 'ch-gamma',
+    type: 'FIAT',
+    label: '对公户 USD',
+    addressPayload: 'DBS SG · ****4420 · Gamma Ads Pte',
+    status: 'ACTIVE',
+    approverTeamId: 'team-c',
+    submittedByMemberId: 'mem-lisi',
+    reviewedByMemberId: 'mem-sunhao',
+    reviewedAt: ts.created,
+    reviewNote: null,
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  },
+  {
+    id: 'cpa-gamma-pending',
+    channelId: 'ch-gamma',
+    type: 'CRYPTO',
+    label: 'USDT-TRC20 (待审)',
+    addressPayload: 'TPendingGammaAddrNotSelectableYet001',
+    status: 'PENDING_APPROVAL',
+    approverTeamId: 'team-c',
+    submittedByMemberId: 'mem-lisi',
+    reviewedByMemberId: null,
+    reviewedAt: null,
+    reviewNote: null,
+    createdAt: ts.updated,
+    updatedAt: ts.updated
+  }
+]
+
+export const channelReconciliations: ChannelReconciliation[] = []
 
 export const channelPrepayments: ChannelPrepayment[] = [
   {
     id: 'pay-001',
     paymentNo: 'PP-202608-001',
     channelId: 'ch-alpha',
+    paymentAddressId: 'cpa-alpha-bank',
+    productOwnership: 'INTERNAL',
     amount: 50000,
     currency: 'USD',
     status: 'CONFIRMED',
@@ -785,5 +1161,125 @@ export const channelRefunds: ChannelRefund[] = [
     confirmedAt: null,
     note: null,
     createdAt: '2026-09-10T00:00:00.000Z'
+  }
+]
+
+/** Phase 20 — Connector framework seeds (config only; no real OAuth / sync). */
+export const mediaConnectorBindings: MediaConnectorBinding[] = [
+  {
+    id: 'mcb-meta',
+    mediaId: 'media-meta',
+    implKey: 'meta',
+    assetTypeIds: ['pat-meta-bm'],
+    status: 'ACTIVE',
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  },
+  {
+    id: 'mcb-google',
+    mediaId: 'media-google',
+    implKey: 'google',
+    assetTypeIds: ['pat-google-mcc'],
+    status: 'ACTIVE',
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  },
+  {
+    id: 'mcb-tiktok',
+    mediaId: 'media-tiktok',
+    implKey: 'tiktok',
+    assetTypeIds: ['pat-tiktok-bc'],
+    status: 'ACTIVE',
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  },
+  {
+    id: 'mcb-snapchat',
+    mediaId: 'media-snapchat',
+    implKey: 'snapchat',
+    assetTypeIds: ['pat-snap-org'],
+    status: 'ACTIVE',
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  }
+]
+
+export const mediaFieldDefinitions: MediaFieldDefinition[] = [
+  {
+    id: 'mfd-meta-bm-hint',
+    mediaId: 'media-meta',
+    usage: 'DEMAND',
+    key: 'preferredBmHint',
+    label: 'Preferred BM hint',
+    fieldType: 'text',
+    required: false,
+    status: 'ACTIVE',
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  },
+  {
+    id: 'mfd-snap-org-hint',
+    mediaId: 'media-snapchat',
+    usage: 'DEMAND',
+    key: 'organizationHint',
+    label: 'Organization hint',
+    fieldType: 'text',
+    required: false,
+    status: 'ACTIVE',
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  },
+  {
+    id: 'mfd-meta-account-name',
+    mediaId: 'media-meta',
+    usage: 'ACCOUNT_MAP',
+    key: 'accountName',
+    label: 'Account Name',
+    fieldType: 'text',
+    required: false,
+    sourceKey: 'name',
+    status: 'ACTIVE',
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  }
+]
+
+export const mediaCredentials: MediaCredential[] = [
+  {
+    id: 'mcred-meta-ops',
+    connectorBindingId: 'mcb-meta',
+    label: 'Meta Ops (Mock)',
+    status: 'MOCK_CONNECTED',
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  },
+  {
+    id: 'mcred-google-ops',
+    connectorBindingId: 'mcb-google',
+    label: 'Google Ops (Mock)',
+    status: 'EXPIRED',
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  }
+]
+
+export const syncScopeConfigs: SyncScopeConfig[] = [
+  {
+    id: 'ssc-meta-ops',
+    credentialId: 'mcred-meta-ops',
+    discoverAccounts: true,
+    syncSpend: true,
+    syncStatus: true,
+    assetTypeIds: ['pat-meta-bm'],
+    updatedAt: ts.updated
+  },
+  {
+    id: 'ssc-google-ops',
+    credentialId: 'mcred-google-ops',
+    discoverAccounts: true,
+    syncSpend: false,
+    syncStatus: true,
+    assetTypeIds: ['pat-google-mcc'],
+    updatedAt: ts.updated
   }
 ]
