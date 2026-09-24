@@ -6,7 +6,9 @@ export type {
   CreateMediaPlatformInput,
   UpdateMediaPlatformInput,
   CreatePlatformAssetTypeInput,
-  UpdatePlatformAssetTypeInput
+  UpdatePlatformAssetTypeInput,
+  CreatePlatformAssetInput,
+  UpdatePlatformAssetInput
 } from './media/types'
 export { mediaService } from './media/mock'
 
@@ -37,6 +39,8 @@ export type {
   ChannelListItem,
   ChannelMetrics,
   ChannelDetailBundle,
+  CreateChannelInput,
+  UpdateChannelInput,
   CreatePrepaymentInput,
   SubmitPaymentAddressInput,
   UpdatePaymentAddressInput,
@@ -103,7 +107,8 @@ export { organizationService } from './organization/mock'
 export type {
   DictionaryService,
   DictionaryEnumItem,
-  DictionaryEnumKind
+  DictionaryEnumKind,
+  CreateEnumItemInput
 } from './dictionary/types'
 export { DICTIONARY_KIND_LABELS } from './dictionary/types'
 export { dictionaryService } from './dictionary/mock'
@@ -180,7 +185,25 @@ export type {
   UpdateSyncScopeInput
 } from './connectors/types'
 export { connectorService } from './connectors/mock'
-export { MEDIA_CONNECTOR_REGISTRY, getConnectorDefinition } from './connectors/registry'
+export {
+  MEDIA_CONNECTOR_REGISTRY,
+  getConnectorDefinition,
+  getConnectorAdapter,
+  getAdapterForMediaCode,
+  isDiscoveryReadyForMediaCode
+} from './connectors/registry'
+
+export type { PlatformAppService } from './platform-apps/types'
+export { platformAppService } from './platform-apps'
+export type {
+  MediaConnectorAdapter,
+  ConnectorAuthorizeResult,
+  ConnectorTokenResult,
+  ConnectorDiscoveredAccount,
+  ConnectorAccountSnapshot,
+  ConnectorCampaignRow,
+  ConnectorMetricsRow
+} from './connectors/adapter'
 
 export type {
   BatchImportService,
@@ -196,3 +219,34 @@ export type {
   RunDiscoveryResult
 } from './media-sync/types'
 export { mediaSyncService } from './media-sync/mock'
+
+export type { AccountAccessService } from './access/types'
+export { accountAccessService, getAccessibleAccountIdsSync } from './access/mock'
+export type {
+  OrgAdminService,
+  AppUserListItem,
+  CreateOrganizationInput,
+  UpdateOrganizationInput,
+  CreateAppUserInput,
+  UpdateAppUserInput
+} from './access/org-admin-types'
+export { orgAdminService } from './access/org-admin'
+
+export type {
+  AuditService,
+  AppendAuditInput
+} from './audit/types'
+export { auditService } from './audit/mock'
+
+export type {
+  ConnectionService,
+  PlatformConnectionSummary,
+  MediaConnectionListItem,
+  StartConnectionInput,
+  CompleteMockAuthInput,
+  DiscoverViaConnectionResult,
+  ImportConnectionAccountsInput,
+  ImportConnectionAccountsResult,
+  AssignUserToAccountInput
+} from './connections/types'
+export { connectionService } from './connections/mock'

@@ -476,6 +476,14 @@ function demandCell(row: Row<TeamDemandListItem>) {
           </template>
 
           <template v-else-if="activeTab === 'accounts'">
+            <UAlert
+              color="info"
+              variant="subtle"
+              icon="i-lucide-info"
+              title="团队账户与成员分配"
+              class="mb-4"
+              description="打开账户详情 → Assignment 标签，可为成员分配 / 取消访问权限。Team Manager 可见本团队全部账户；Member 仅见自己接入或被分配的账户。"
+            />
             <div v-if="!accounts.length" class="text-sm text-muted py-8 text-center">
               该团队当前无归属账户
             </div>

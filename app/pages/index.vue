@@ -27,13 +27,21 @@ const items = [[{
   icon: 'i-lucide-users',
   to: '/teams'
 }], [{
-  label: '数据接入',
-  icon: 'i-lucide-database',
+  label: '媒体平台开通',
+  icon: 'i-lucide-plug',
   to: '/settings'
+}, {
+  label: '平台连接',
+  icon: 'i-lucide-link',
+  to: '/accounts/connections'
 }, {
   label: '组织与成员',
   icon: 'i-lucide-user-cog',
   to: '/settings/organization'
+}, {
+  label: '渠道',
+  icon: 'i-lucide-git-branch',
+  to: '/settings/channels'
 }, {
   label: '产品与客户',
   icon: 'i-lucide-package',
@@ -127,7 +135,7 @@ watch(trendDays, () => { void loadOverview() }, { immediate: true })
 
         <template v-else-if="bundle">
           <HomeStats :kpis="bundle.kpis" />
-          <HomeChart :spend-trend="bundle.spendTrend" />
+          <HomeChart :spend-trend="bundle.spendTrend" :period="period" />
           <div class="grid lg:grid-cols-2 gap-4">
             <HomeConsumptionSplit :ownership-spend="bundle.ownershipSpend" />
             <HomeAccountStructure :account-structure="bundle.accountStructure" />

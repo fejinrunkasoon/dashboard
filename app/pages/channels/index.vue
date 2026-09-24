@@ -262,6 +262,8 @@ function cell(row: Row<ChannelListItem>): ChannelListItem {
 
         <p class="text-xs text-muted">
           渠道中心管理上游交户与结算视图。30D Spend 为媒体消耗（不含 Service Fee）。登记打款在渠道详情 Finance。
+          渠道编制（新增/编辑）请到
+          <NuxtLink to="/settings/channels" class="text-primary underline">系统管理 → 渠道</NuxtLink>。
         </p>
 
         <div v-if="errorMessage" class="rounded-lg border border-error/30 bg-error/5 p-4 text-sm text-error">

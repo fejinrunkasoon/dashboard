@@ -3,6 +3,7 @@ import type {
   LogsService,
   OperationLog
 } from './types'
+import { auditLogs, appUsers } from '../../mocks/entities'
 
 const operationLogs: OperationLog[] = [
   {
@@ -95,9 +96,26 @@ const syncLogs: ConnectorSyncLog[] = [
   }
 ]
 
+function auditToOperationLog(): OperationLog[] {
+  return auditLogs.map((entry) => {
+    const actor = appUsers.find(u => u.id === entry.actorUserId)
+    return {
+      id: entry.id,
+      at: entry.createdAt,
+      actor: actor?.displayName ?? entry.actorUserId,
+      module: '平台连接 / 账户权限',
+      action: entry.action,
+      target: `${entry.resourceType}:${entry.resourceId}`,
+      result: 'SUCCESS' as const
+    }
+  })
+}
+
 export const logsService: LogsService = {
   async getOperationLogs() {
-    return operationLogs.map(item => ({ ...item }))
+    const merged = [...auditToOperationLog(), ...operationLogs]
+    merged.sort((a, b) => b.at.localeCompare(a.at))
+    return merged.map(item => ({ ...item }))
   },
   async getSyncLogs() {
     return syncLogs.map(item => ({ ...item }))

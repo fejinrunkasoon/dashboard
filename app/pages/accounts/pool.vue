@@ -7,6 +7,7 @@ import type {
   AccountPoolStats,
   AdAccountListItem
 } from '~/domain'
+import { DEMAND_TIMEZONE_OPTIONS } from '~/domain'
 import {
   accountService,
   channelService,
@@ -36,11 +37,7 @@ const mediaFilterOptions = [
 
 const timezoneOptions = [
   { label: '全部时区', value: 'all' },
-  { label: 'GMT+8', value: 'GMT+8' },
-  { label: 'GMT+0', value: 'GMT+0' },
-  { label: 'GMT-5', value: 'GMT-5' },
-  { label: 'GMT-7', value: 'GMT-7' },
-  { label: 'GMT-8', value: 'GMT-8' }
+  ...DEMAND_TIMEZONE_OPTIONS
 ]
 
 const keyword = computed({

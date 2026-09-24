@@ -1,9 +1,14 @@
 import type { EntityStatus } from '../../domain/common'
 import type {
+  CreateEnumItemInput,
   DictionaryEnumItem,
   DictionaryEnumKind,
   DictionaryService
 } from './types'
+
+function normalizeCode(code: string): string {
+  return code.trim().toUpperCase().replace(/\s+/g, '_')
+}
 
 const enumItems: DictionaryEnumItem[] = [
   { id: 'enum-tr-rebalance', kind: 'TRANSFER_REASON', code: 'REBALANCE', label: '资源调配', status: 'ACTIVE' },
@@ -28,6 +33,30 @@ export const dictionaryService: DictionaryService = {
   async getEnumItems(kind?: DictionaryEnumKind) {
     if (!kind) return enumItems.map(item => ({ ...item }))
     return enumItems.filter(item => item.kind === kind).map(item => ({ ...item }))
+  },
+
+  async createEnumItem(input: CreateEnumItemInput): Promise<DictionaryEnumItem> {
+    const code = normalizeCode(input.code)
+    const label = input.label?.trim()
+    if (!input.kind) throw new Error('kind is required')
+    if (!code) throw new Error('code is required')
+    if (!label) throw new Error('label is required')
+    if (enumItems.some(item => item.kind === input.kind && item.code === code)) {
+      throw new Error(`Enum code already exists for ${input.kind}: ${code}`)
+    }
+
+    const item: DictionaryEnumItem = {
+      id: `enum-${input.kind.toLowerCase().replace(/_/g, '-')}-${code.toLowerCase()}`,
+      kind: input.kind,
+      code,
+      label,
+      status: 'ACTIVE'
+    }
+    if (enumItems.some(row => row.id === item.id)) {
+      item.id = `${item.id}-${enumItems.length + 1}`
+    }
+    enumItems.push(item)
+    return { ...item }
   },
 
   async setEnumStatus(id: string, status: EntityStatus) {

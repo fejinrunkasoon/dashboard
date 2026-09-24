@@ -33,7 +33,7 @@ import {
   teams
 } from '../../mocks'
 import { MOCK_TODAY } from '../../utils/spend-aggregation'
-import { intakeAdAccount } from '../accounts/intake'
+import { intakeAdAccount, resolvePlatformAssetByExternalId } from '../accounts/intake'
 import { isInAccountPool } from '../accounts/pool-eligibility'
 import { alertService } from '../alerts/mock'
 import type {
@@ -898,6 +898,10 @@ export const demandService: DemandService = {
     const createdAccounts: AdAccount[] = []
     const ts = nowIso()
 
+    const demandItem = demandItems.find(row => row.id === order.relatedDemandItemId)
+    const defaultProductId = demandItem?.productId ?? null
+    const actorMemberId = input.actorMemberId?.trim() || null
+
     for (const row of input.accounts) {
       const externalAccountId = row.externalAccountId?.trim()
       if (!externalAccountId) throw new Error('externalAccountId is required')
@@ -914,6 +918,12 @@ export const demandService: DemandService = {
         ?? order.timezone
         ?? null
 
+      const productId = row.productId?.trim() || defaultProductId
+      const spendLimit
+        = row.spendLimit != null && Number.isFinite(row.spendLimit) && row.spendLimit > 0
+          ? row.spendLimit
+          : null
+
       const { account } = intakeAdAccount({
         externalAccountId,
         mediaId: order.mediaId,
@@ -921,6 +931,10 @@ export const demandService: DemandService = {
         timezone,
         sourceChannelId: order.channelId,
         platformAssetId: row.platformAssetId ?? null,
+        productId,
+        managerMemberId: actorMemberId,
+        createdByMemberId: actorMemberId,
+        spendLimit,
         note: `Inbound from ${order.orderNo}`,
         reason: `Channel order ${order.orderNo}`,
         intakeSource: 'ORDER',
@@ -1092,7 +1106,10 @@ export const demandService: DemandService = {
     return { order: cloneOrder(order), draft, validation }
   },
 
-  async confirmDeliveryFromDraft(orderId): Promise<ConfirmDeliveryFromDraftResult> {
+  async confirmDeliveryFromDraft(
+    orderId: string,
+    actorMemberId?: string | null
+  ): Promise<ConfirmDeliveryFromDraftResult> {
     const order = requireOrder(orderId)
     const draft = deliveryDrafts.get(orderId)
     if (!draft) throw new Error('No delivery draft to confirm; submit Reply first')
@@ -1105,13 +1122,24 @@ export const demandService: DemandService = {
       )
     }
 
+    let resolvedAssetId: string | null = null
+    for (const bmExternal of draft.bmIds) {
+      resolvedAssetId = resolvePlatformAssetByExternalId(
+        order.mediaId,
+        bmExternal,
+        order.channelId
+      )
+      if (resolvedAssetId) break
+    }
+
     const result = await demandService.confirmChannelAccountDelivery({
       orderId,
+      actorMemberId: actorMemberId ?? null,
       accounts: draft.accountIds.map(row => ({
         externalAccountId: row.externalAccountId,
         name: row.name ?? null,
         timezone: order.timezone ?? null,
-        platformAssetId: null
+        platformAssetId: resolvedAssetId
       }))
     })
 

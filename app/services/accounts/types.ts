@@ -95,6 +95,18 @@ export interface ChangeFeePolicyResult {
   feePolicyAssignmentId: string
 }
 
+export interface ChangeSpendLimitInput {
+  accountId: string
+  /** null clears the account-level cap */
+  spendLimit: number | null
+  createdBy: string
+}
+
+export interface ChangeSpendLimitResult {
+  accountId: string
+  spendLimit: number | null
+}
+
 export interface AccountService {
   getAccounts(query?: AccountQuery): Promise<PagedResponse<AdAccountListItem>>
   getAccountStats(query?: AccountQuery): Promise<AccountStats>
@@ -128,4 +140,5 @@ export interface AccountService {
   changeManager(input: ChangeManagerInput): Promise<ChangeManagerResult>
   /** End current fee-policy segment and open a new one; DISABLED policies cannot bind. */
   changeFeePolicy(input: ChangeFeePolicyInput): Promise<ChangeFeePolicyResult>
+  changeSpendLimit(input: ChangeSpendLimitInput): Promise<ChangeSpendLimitResult>
 }

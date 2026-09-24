@@ -102,11 +102,17 @@ export interface DeliveredAccountInput {
   name?: string | null
   timezone?: string | null
   platformAssetId?: string | null
+  /** Override Demand product for this row; null keeps order Demand product. */
+  productId?: string | null
+  /** Account-level spend cap. */
+  spendLimit?: number | null
 }
 
 export interface ConfirmChannelAccountDeliveryInput {
   orderId: string
   accounts: DeliveredAccountInput[]
+  /** Operator member id → recorded as 户管 at intake. */
+  actorMemberId?: string | null
 }
 
 export interface ConfirmChannelAccountDeliveryResult {
@@ -172,7 +178,10 @@ export interface DemandService {
     rawText: string,
     replyToMessageId?: string | null
   ): Promise<SubmitMockDeliveryReplyResult>
-  confirmDeliveryFromDraft(orderId: string): Promise<ConfirmDeliveryFromDraftResult>
+  confirmDeliveryFromDraft(
+    orderId: string,
+    actorMemberId?: string | null
+  ): Promise<ConfirmDeliveryFromDraftResult>
   closePartialOrder(orderId: string, reason?: string | null): Promise<ChannelAccountOrder>
   simulatePartialReminder(orderId: string): Promise<SimulatePartialReminderResult>
 }

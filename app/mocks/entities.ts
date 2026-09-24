@@ -1,3 +1,8 @@
+import type { Organization, AppUser } from '../domain/access'
+import type { MediaConnection, ConnectionAccount, ConnectionSecret } from '../domain/connection'
+import type { TeamAccountLink, UserAccountAccess } from '../domain/governance'
+import type { AuditLog } from '../domain/audit'
+import type { PlatformApp } from '../domain/platform-app'
 import type {
   AccountAssignment,
   AccountChannelAssignment,
@@ -34,6 +39,58 @@ const ts = {
   created: '2026-01-15T00:00:00.000Z',
   updated: '2026-09-10T00:00:00.000Z'
 }
+
+/** Default tenant for mock data. */
+export const DEFAULT_ORGANIZATION_ID = 'org-ffj'
+
+export const organizations: Organization[] = [
+  {
+    id: DEFAULT_ORGANIZATION_ID,
+    code: 'FFJ',
+    name: 'FFJ Demo Org',
+    status: 'ACTIVE',
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  }
+]
+
+export const appUsers: AppUser[] = [
+  {
+    id: 'user-wangwu',
+    memberId: 'mem-wangwu',
+    organizationId: DEFAULT_ORGANIZATION_ID,
+    displayName: '王五',
+    roles: ['TEAM_MANAGER', 'ORG_ADMIN'],
+    status: 'ACTIVE'
+  },
+  {
+    id: 'user-zhangsan',
+    memberId: 'mem-zhangsan',
+    organizationId: DEFAULT_ORGANIZATION_ID,
+    displayName: '张三',
+    roles: ['TEAM_MANAGER'],
+    status: 'ACTIVE'
+  },
+  {
+    id: 'user-lisi',
+    memberId: 'mem-lisi',
+    organizationId: DEFAULT_ORGANIZATION_ID,
+    displayName: '李四',
+    roles: ['TEAM_MEMBER'],
+    status: 'ACTIVE'
+  },
+  {
+    id: 'user-admin',
+    memberId: 'mem-wangwu',
+    organizationId: DEFAULT_ORGANIZATION_ID,
+    displayName: 'Platform Admin',
+    roles: ['PLATFORM_ADMIN', 'ORG_ADMIN'],
+    status: 'ACTIVE'
+  }
+]
+
+/** Mock session default — Team A member 李四 for assignment demos; switchable via useCurrentUser. */
+export const DEFAULT_CURRENT_USER_ID = 'user-lisi'
 
 export const mediaPlatforms: MediaPlatform[] = [
   { id: 'media-meta', code: 'META', name: 'Meta', status: 'ACTIVE' },
@@ -101,9 +158,9 @@ export const products: Product[] = [
 ]
 
 export const teams: Team[] = [
-  { id: 'team-a', code: 'TEAM_A', name: 'Team A', leaderMemberId: 'mem-wangwu', status: 'ACTIVE' },
-  { id: 'team-b', code: 'TEAM_B', name: 'Team B', leaderMemberId: 'mem-zhaolei', status: 'ACTIVE' },
-  { id: 'team-c', code: 'TEAM_C', name: 'Team C', leaderMemberId: 'mem-sunhao', status: 'ACTIVE' }
+  { id: 'team-a', code: 'TEAM_A', name: 'Team A', organizationId: DEFAULT_ORGANIZATION_ID, leaderMemberId: 'mem-wangwu', status: 'ACTIVE' },
+  { id: 'team-b', code: 'TEAM_B', name: 'Team B', organizationId: DEFAULT_ORGANIZATION_ID, leaderMemberId: 'mem-zhaolei', status: 'ACTIVE' },
+  { id: 'team-c', code: 'TEAM_C', name: 'Team C', organizationId: DEFAULT_ORGANIZATION_ID, leaderMemberId: 'mem-sunhao', status: 'ACTIVE' }
 ]
 
 export const members: Member[] = [
@@ -221,7 +278,10 @@ export const serviceFeeTiers: ServiceFeeTier[] = [
 ]
 
 function account(partial: AdAccount): AdAccount {
-  return partial
+  return {
+    organizationId: DEFAULT_ORGANIZATION_ID,
+    ...partial
+  }
 }
 
 export const accounts: AdAccount[] = [
@@ -1164,7 +1224,35 @@ export const channelRefunds: ChannelRefund[] = [
   }
 ]
 
-/** Phase 20 — Connector framework seeds (config only; no real OAuth / sync). */
+/** Media access refactor — PlatformApp seeds (system-level App per media). */
+export const platformApps: PlatformApp[] = [
+  {
+    id: 'papp-meta-01',
+    mediaId: 'media-meta',
+    appId: 'mock-meta-app-id',
+    hasSecret: true,
+    hasDeveloperToken: false,
+    status: 'ACTIVE',
+    isDefault: true,
+    redirectUriHint: '/api/oauth/meta/callback',
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  },
+  {
+    id: 'papp-google-01',
+    mediaId: 'media-google',
+    appId: 'mock-google-client-id',
+    hasSecret: true,
+    hasDeveloperToken: true,
+    status: 'ACTIVE',
+    isDefault: true,
+    redirectUriHint: '/api/oauth/google/callback',
+    createdAt: ts.created,
+    updatedAt: ts.updated
+  }
+]
+
+/** @deprecated Kept for demand-field / legacy sync bridge during transition. */
 export const mediaConnectorBindings: MediaConnectorBinding[] = [
   {
     id: 'mcb-meta',
@@ -1204,6 +1292,7 @@ export const mediaConnectorBindings: MediaConnectorBinding[] = [
   }
 ]
 
+/** Hardcoded DEMAND hints for ApplyAccountDemandModal (no UI config). */
 export const mediaFieldDefinitions: MediaFieldDefinition[] = [
   {
     id: 'mfd-meta-bm-hint',
@@ -1216,70 +1305,140 @@ export const mediaFieldDefinitions: MediaFieldDefinition[] = [
     status: 'ACTIVE',
     createdAt: ts.created,
     updatedAt: ts.updated
-  },
+  }
+]
+
+/** @deprecated Prefer PlatformApp + MediaConnection. */
+export const mediaCredentials: MediaCredential[] = []
+
+/** @deprecated */
+export const syncScopeConfigs: SyncScopeConfig[] = []
+
+/** Tenant-plane MediaConnection — platformAppId required for authorized rows. */
+export const mediaConnections: MediaConnection[] = [
   {
-    id: 'mfd-snap-org-hint',
-    mediaId: 'media-snapchat',
-    usage: 'DEMAND',
-    key: 'organizationHint',
-    label: 'Organization hint',
-    fieldType: 'text',
-    required: false,
-    status: 'ACTIVE',
-    createdAt: ts.created,
-    updatedAt: ts.updated
-  },
-  {
-    id: 'mfd-meta-account-name',
-    mediaId: 'media-meta',
-    usage: 'ACCOUNT_MAP',
-    key: 'accountName',
-    label: 'Account Name',
-    fieldType: 'text',
-    required: false,
-    sourceKey: 'name',
-    status: 'ACTIVE',
+    id: 'conn-meta-wangwu',
+    organizationId: DEFAULT_ORGANIZATION_ID,
+    teamId: 'team-a',
+    platformId: 'media-meta',
+    displayName: 'Meta - 王五',
+    authorizedByUserId: 'user-wangwu',
+    status: 'MOCK',
+    providerIdentityId: 'meta-user-wangwu',
+    providerIdentityName: '王五 (Mock)',
+    scopes: ['ads_read'],
+    isMock: true,
+    platformAppId: 'papp-meta-01',
+    legacyCredentialId: null,
+    authorizedAt: '2026-09-15T10:00:00.000Z',
+    expiresAt: null,
+    lastVerifiedAt: '2026-09-20T08:00:00.000Z',
+    lastSyncAt: '2026-09-20T08:05:00.000Z',
     createdAt: ts.created,
     updatedAt: ts.updated
   }
 ]
 
-export const mediaCredentials: MediaCredential[] = [
+export const connectionSecrets: ConnectionSecret[] = [
   {
-    id: 'mcred-meta-ops',
-    connectorBindingId: 'mcb-meta',
-    label: 'Meta Ops (Mock)',
-    status: 'MOCK_CONNECTED',
-    createdAt: ts.created,
-    updatedAt: ts.updated
-  },
-  {
-    id: 'mcred-google-ops',
-    connectorBindingId: 'mcb-google',
-    label: 'Google Ops (Mock)',
-    status: 'EXPIRED',
-    createdAt: ts.created,
+    connectionId: 'conn-meta-wangwu',
+    hasAccessToken: true,
+    hasRefreshToken: false,
+    tokenExpiresAt: null,
+    secretVersion: 1,
     updatedAt: ts.updated
   }
 ]
 
-export const syncScopeConfigs: SyncScopeConfig[] = [
+export const connectionAccounts: ConnectionAccount[] = [
   {
-    id: 'ssc-meta-ops',
-    credentialId: 'mcred-meta-ops',
-    discoverAccounts: true,
-    syncSpend: true,
-    syncStatus: true,
-    assetTypeIds: ['pat-meta-bm'],
+    id: 'ca-meta-100001',
+    organizationId: DEFAULT_ORGANIZATION_ID,
+    connectionId: 'conn-meta-wangwu',
+    mediaAccountId: 'acc-case-e',
+    providerAccessStatus: 'ACCESSIBLE',
+    syncEnabled: true,
+    isPrimarySyncSource: true,
+    discoveredAt: '2026-09-15T10:05:00.000Z',
+    lastVerifiedAt: '2026-09-20T08:00:00.000Z',
+    lastSuccessfulSyncAt: '2026-09-20T08:05:00.000Z',
+    createdAt: '2026-09-15T10:05:00.000Z',
     updatedAt: ts.updated
   },
   {
-    id: 'ssc-google-ops',
-    credentialId: 'mcred-google-ops',
-    discoverAccounts: true,
-    syncSpend: false,
-    syncStatus: true,
-    assetTypeIds: ['pat-google-mcc'],
+    id: 'ca-meta-200001',
+    organizationId: DEFAULT_ORGANIZATION_ID,
+    connectionId: 'conn-meta-wangwu',
+    mediaAccountId: 'acc-fee-a',
+    providerAccessStatus: 'ACCESSIBLE',
+    syncEnabled: true,
+    isPrimarySyncSource: true,
+    discoveredAt: '2026-09-15T10:05:00.000Z',
+    lastVerifiedAt: '2026-09-20T08:00:00.000Z',
+    lastSuccessfulSyncAt: '2026-09-20T08:05:00.000Z',
+    createdAt: '2026-09-15T10:05:00.000Z',
     updatedAt: ts.updated
   }
 ]
+
+export const teamAccountLinks: TeamAccountLink[] = [
+  {
+    id: 'tal-case-e',
+    organizationId: DEFAULT_ORGANIZATION_ID,
+    teamId: 'team-a',
+    mediaAccountId: 'acc-case-e',
+    status: 'ACTIVE',
+    assignedByUserId: 'user-wangwu',
+    assignedAt: '2026-09-15T10:10:00.000Z',
+    endedAt: null
+  },
+  {
+    id: 'tal-fee-a',
+    organizationId: DEFAULT_ORGANIZATION_ID,
+    teamId: 'team-a',
+    mediaAccountId: 'acc-fee-a',
+    status: 'ACTIVE',
+    assignedByUserId: 'user-wangwu',
+    assignedAt: '2026-09-15T10:10:00.000Z',
+    endedAt: null
+  }
+]
+
+export const userAccountAccesses: UserAccountAccess[] = [
+  {
+    id: 'uaa-case-e-wangwu',
+    organizationId: DEFAULT_ORGANIZATION_ID,
+    mediaAccountId: 'acc-case-e',
+    userId: 'user-wangwu',
+    assignmentType: 'IMPORTED_BY',
+    assignedByUserId: 'user-wangwu',
+    assignedAt: '2026-09-15T10:10:00.000Z',
+    status: 'ACTIVE',
+    endedAt: null
+  },
+  {
+    id: 'uaa-fee-a-wangwu',
+    organizationId: DEFAULT_ORGANIZATION_ID,
+    mediaAccountId: 'acc-fee-a',
+    userId: 'user-wangwu',
+    assignmentType: 'IMPORTED_BY',
+    assignedByUserId: 'user-wangwu',
+    assignedAt: '2026-09-15T10:10:00.000Z',
+    status: 'ACTIVE',
+    endedAt: null
+  },
+  {
+    id: 'uaa-case-e-lisi',
+    organizationId: DEFAULT_ORGANIZATION_ID,
+    mediaAccountId: 'acc-case-e',
+    userId: 'user-lisi',
+    assignmentType: 'ASSIGNED',
+    assignedByUserId: 'user-wangwu',
+    assignedAt: '2026-09-16T09:00:00.000Z',
+    status: 'ACTIVE',
+    endedAt: null
+  }
+]
+
+export const auditLogs: AuditLog[] = []
+

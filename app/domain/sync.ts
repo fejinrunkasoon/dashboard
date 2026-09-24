@@ -15,9 +15,10 @@ export interface SyncJobStats {
 
 export interface SyncJob {
   id: string
-  credentialId: string
-  bindingId: string
+  /** Primary: tenant-plane connection that triggered discovery/sync. */
+  connectionId: string | null
   mediaId: string
+  platformAppId?: string | null
   implKey: string
   trigger: SyncJobTrigger
   status: SyncJobStatus
@@ -25,6 +26,10 @@ export interface SyncJob {
   finishedAt: string | null
   stats: SyncJobStats
   errorMessage: string | null
+  /** @deprecated Use connectionId. */
+  credentialId?: string | null
+  /** @deprecated Removed with Connector Binding UI. */
+  bindingId?: string | null
 }
 
 export type SyncLogLevel = 'INFO' | 'WARN' | 'ERROR'
@@ -55,23 +60,25 @@ export type DiscoveredImportStatus = 'PENDING' | 'IMPORTED' | 'SKIPPED'
 export interface DiscoveredAccount {
   id: string
   jobId: string
-  credentialId: string
+  connectionId: string | null
   mediaId: string
   externalAccountId: string
   name: string | null
   /** Media-side BM / asset external id when known. */
   platformAssetExternalId: string | null
-  /** Raw media payload keys for ACCOUNT_MAP. */
   raw: Record<string, string>
   matchStatus: DiscoveryMatchStatus
   ffjAccountId: string | null
   importStatus: DiscoveredImportStatus
   createdAt: string
   updatedAt: string
+  /** @deprecated Use connectionId. */
+  credentialId?: string | null
 }
 
 export interface DiscoveredAccountQuery {
   credentialId?: string
+  connectionId?: string
   jobId?: string
   matchStatuses?: DiscoveryMatchStatus[]
   importStatuses?: DiscoveredImportStatus[]
@@ -82,6 +89,7 @@ export interface DiscoveredAccountQuery {
 
 export interface SyncJobQuery {
   credentialId?: string
+  connectionId?: string
   mediaId?: string
   page?: number
   pageSize?: number

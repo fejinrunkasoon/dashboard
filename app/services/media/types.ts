@@ -51,6 +51,21 @@ export interface UpdatePlatformAssetTypeInput {
   name?: string
 }
 
+export interface CreatePlatformAssetInput {
+  mediaId: string
+  typeId: string
+  externalId: string
+  name?: string | null
+  sourceChannelId?: string | null
+  note?: string | null
+}
+
+export interface UpdatePlatformAssetInput {
+  name?: string | null
+  sourceChannelId?: string | null
+  note?: string | null
+}
+
 export interface MediaService {
   getMediaPlatforms(query?: MediaMasterQuery): Promise<MediaPlatform[]>
   getPlatformAssetTypes(mediaId?: string, query?: MediaMasterQuery): Promise<PlatformAssetType[]>
@@ -66,4 +81,8 @@ export interface MediaService {
   createPlatformAssetType(input: CreatePlatformAssetTypeInput): Promise<PlatformAssetType>
   updatePlatformAssetType(id: string, input: UpdatePlatformAssetTypeInput): Promise<PlatformAssetType>
   setPlatformAssetTypeStatus(id: string, status: 'ACTIVE' | 'DISABLED'): Promise<PlatformAssetType>
+
+  createPlatformAsset(input: CreatePlatformAssetInput): Promise<PlatformAsset>
+  updatePlatformAsset(id: string, input: UpdatePlatformAssetInput): Promise<PlatformAsset>
+  setPlatformAssetStatus(id: string, status: 'ACTIVE' | 'DISABLED' | 'ARCHIVED'): Promise<PlatformAsset>
 }

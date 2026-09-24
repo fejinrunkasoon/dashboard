@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AccountSpendDaily, AccountSpendMetrics, AdAccountListItem } from '~/domain'
-import { accountSpendService } from '~/services'
+import { accountService, accountSpendService } from '~/services'
 import { formatCurrency } from '~/utils'
 import { MOCK_TODAY, shiftDate } from '~/utils/spend-aggregation'
 import type { SpendPeriodPreset } from '~/domain'
@@ -10,17 +10,31 @@ const props = defineProps<{
   dailyRows: AccountSpendDaily[]
 }>()
 
+const emit = defineEmits<{
+  refreshed: []
+}>()
+
+const { member } = useCurrentUser()
+const toast = useToast()
 const period = ref<SpendPeriodPreset>('7D')
 const customFrom = ref(shiftDate(MOCK_TODAY, -6))
 const customTo = ref(MOCK_TODAY)
 const metrics = ref<AccountSpendMetrics | null>(null)
 const customSpend = ref<number | null>(null)
 const pending = ref(false)
+const draftLimit = ref<number | null>(null)
+const savingLimit = ref(false)
 
 const recentDaily = computed(() =>
   [...props.dailyRows]
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 14)
+)
+
+watch(
+  () => props.account.spendLimit,
+  (v) => { draftLimit.value = v },
+  { immediate: true }
 )
 
 async function refresh() {
@@ -54,12 +68,35 @@ const selectedSpend = computed(() => {
   if (period.value === 'CUSTOM') return customSpend.value
   return metrics.value.spend7d
 })
+
+async function saveSpendLimit() {
+  if (!member.value?.id || savingLimit.value) return
+  savingLimit.value = true
+  try {
+    await accountService.changeSpendLimit({
+      accountId: props.account.id,
+      spendLimit: draftLimit.value != null && draftLimit.value > 0 ? draftLimit.value : null,
+      createdBy: member.value.id
+    })
+    toast.add({ title: 'Spend Limit 已更新', icon: 'i-lucide-check', color: 'success' })
+    emit('refreshed')
+    await refresh()
+  } catch (error) {
+    toast.add({
+      title: '更新失败',
+      description: error instanceof Error ? error.message : '未知错误',
+      color: 'error'
+    })
+  } finally {
+    savingLimit.value = false
+  }
+}
 </script>
 
 <template>
   <div class="space-y-4">
     <p class="text-xs text-muted">
-      「已花费 / Lifetime」仅为媒体消耗，不含服务费。
+      「已花费 / Lifetime」仅为媒体消耗，不含服务费。有效可消耗 = min(账户额度剩余, 渠道标签共享池剩余)。
     </p>
 
     <FiltersPeriodFilter
@@ -72,7 +109,7 @@ const selectedSpend = computed(() => {
     <div v-if="pending" class="text-sm text-muted py-4">
       加载消耗…
     </div>
-    <div v-else class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+    <div v-else class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
       <div class="rounded-lg border border-default p-3">
         <p class="text-xs text-muted mb-1">
           选定周期
@@ -91,19 +128,52 @@ const selectedSpend = computed(() => {
       </div>
       <div class="rounded-lg border border-default p-3">
         <p class="text-xs text-muted mb-1">
-          Spend Limit
-        </p>
-        <p class="font-mono">
-          {{ account.spendLimit == null ? '—' : formatCurrency(account.spendLimit) }}
-        </p>
-      </div>
-      <div class="rounded-lg border border-default p-3">
-        <p class="text-xs text-muted mb-1">
-          Remaining
+          账户额度剩余
         </p>
         <p class="font-mono">
           {{ account.remainingLimit == null ? '—' : formatCurrency(account.remainingLimit) }}
         </p>
+      </div>
+      <div class="rounded-lg border border-default p-3">
+        <p class="text-xs text-muted mb-1">
+          共享池剩余
+        </p>
+        <p class="font-mono">
+          {{ account.poolRemaining == null ? '—' : formatCurrency(account.poolRemaining) }}
+        </p>
+      </div>
+      <div class="rounded-lg border border-default p-3">
+        <p class="text-xs text-muted mb-1">
+          有效可消耗
+        </p>
+        <p class="font-mono text-highlighted">
+          {{ account.effectiveRemaining == null ? '—' : formatCurrency(account.effectiveRemaining) }}
+        </p>
+      </div>
+    </div>
+
+    <div class="rounded-lg border border-default p-3 space-y-2">
+      <p class="text-xs font-medium text-highlighted">
+        设置最高额度（Spend Limit）
+      </p>
+      <div class="flex flex-wrap items-end gap-2">
+        <UFormField label="金额" class="min-w-40">
+          <UInput
+            v-model.number="draftLimit"
+            type="number"
+            :min="0"
+            step="100"
+            placeholder="空=不限"
+          />
+        </UFormField>
+        <UButton
+          label="保存额度"
+          size="sm"
+          color="primary"
+          :loading="savingLimit"
+          :disabled="!member"
+          @click="saveSpendLimit"
+        />
       </div>
     </div>
 

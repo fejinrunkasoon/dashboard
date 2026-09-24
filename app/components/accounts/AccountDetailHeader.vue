@@ -273,6 +273,14 @@ function moneyOrDash(value: number | null | undefined): string {
           {{ moneyOrDash(account.remainingLimit) }}
         </p>
       </div>
+      <div class="rounded-lg border border-default p-3">
+        <p class="text-xs text-muted mb-1">
+          有效可消耗
+        </p>
+        <p class="font-mono text-sm">
+          {{ moneyOrDash(account.effectiveRemaining) }}
+        </p>
+      </div>
     </div>
   </div>
 </template>

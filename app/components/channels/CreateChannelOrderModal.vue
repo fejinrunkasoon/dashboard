@@ -29,6 +29,15 @@ const mediaNameMap = ref(
   ) as Record<string, string>
 )
 
+interface DemandItemOption {
+  label: string
+  value: string
+  mediaId: string
+  timezone: string | null
+  /** Remaining demand qty (requested − allocated), used to prefill Quantity. */
+  quantity: number
+}
+
 const channelId = ref<string | undefined>()
 const mediaId = ref<string | undefined>()
 const quantity = ref(1)
@@ -37,9 +46,21 @@ const timezoneOptions = DEMAND_TIMEZONE_OPTIONS
 const externalOrderNo = ref('')
 const demandItemId = ref<string | undefined>()
 const asDraft = ref(false)
-const demandItemOptions = ref<{ label: string, value: string, mediaId: string }[]>([])
+const demandItemOptions = ref<DemandItemOption[]>([])
 
 const mediaName = (id: string) => mediaNameMap.value[id] ?? id
+
+const selectedDemandOption = computed(() =>
+  demandItemOptions.value.find(item => item.value === demandItemId.value) ?? null
+)
+
+const quantityDescription = computed(() => {
+  if (props.shortageRow) return `默认 Shortage，最多 ${props.shortageRow.shortage}`
+  if (selectedDemandOption.value) {
+    return `已按 Demand 剩余量填入 ${selectedDemandOption.value.quantity}，可按询价量调整`
+  }
+  return undefined
+})
 
 const channelOptions = computed(() => {
   const media = mediaId.value
@@ -90,24 +111,52 @@ async function reloadMediaOptions() {
   mediaNameMap.value = Object.fromEntries(all.map(item => [item.id, item.name]))
 }
 
+function itemTimezone(requirements: Record<string, unknown>): string | null {
+  const tz = requirements?.timezone
+  return typeof tz === 'string' && tz.trim() ? tz.trim() : null
+}
+
+/** Bind Media / Quantity / Timezone from the selected Demand Item (TG 询价约束). */
+function applyDemandConstraints(id: string | undefined) {
+  if (!id || isShortageMode.value) return
+  const option = demandItemOptions.value.find(item => item.value === id)
+  if (!option) return
+  if (mediaId.value !== option.mediaId) mediaId.value = option.mediaId
+  quantity.value = option.quantity
+  timezone.value = option.timezone ?? undefined
+}
+
 async function loadDemandItems() {
-  const page = await demandService.getDemands({
-    statuses: ['SUBMITTED', 'APPROVED', 'PARTIALLY_ALLOCATED'],
-    page: 1,
-    pageSize: 200
-  })
-  const options: { label: string, value: string, mediaId: string }[] = []
+  const [page, allocations] = await Promise.all([
+    demandService.getDemands({
+      statuses: ['SUBMITTED', 'APPROVED', 'PARTIALLY_ALLOCATED'],
+      page: 1,
+      pageSize: 200
+    }),
+    demandService.getDemandAllocations()
+  ])
+  const allocatedByItem = new Map<string, number>()
+  for (const row of allocations) {
+    allocatedByItem.set(row.demandItemId, (allocatedByItem.get(row.demandItemId) ?? 0) + 1)
+  }
+
+  const options: DemandItemOption[] = []
   for (const demand of page.data) {
     const items = await demandService.getDemandItems(demand.id)
     for (const item of items) {
+      const allocated = allocatedByItem.get(item.id) ?? 0
+      const remaining = Math.max(0, item.requestedQuantity - allocated)
       options.push({
         label: `${demand.demandNo} · ${mediaName(item.mediaId)} · ${item.id}`,
         value: item.id,
-        mediaId: item.mediaId
+        mediaId: item.mediaId,
+        timezone: itemTimezone(item.requirements),
+        quantity: Math.max(1, remaining || item.requestedQuantity)
       })
     }
   }
   demandItemOptions.value = options
+  applyDemandConstraints(demandItemId.value)
 }
 
 function resetFromProps() {
@@ -138,11 +187,7 @@ watch(
   }
 )
 
-watch(demandItemId, (id) => {
-  if (!id || isShortageMode.value) return
-  const option = demandItemOptions.value.find(item => item.value === id)
-  if (option && mediaId.value !== option.mediaId) mediaId.value = option.mediaId
-})
+watch(demandItemId, id => applyDemandConstraints(id))
 
 watch(mediaId, () => {
   if (!props.lockedChannelId) {
@@ -272,7 +317,7 @@ async function submit() {
           <UFormField
             label="Quantity"
             required
-            :description="shortageRow ? `默认 Shortage，最多 ${shortageRow.shortage}` : undefined"
+            :description="quantityDescription"
           >
             <UInput
               v-model.number="quantity"
@@ -283,7 +328,12 @@ async function submit() {
             />
           </UFormField>
 
-          <UFormField label="Timezone">
+          <UFormField
+            label="Timezone"
+            :description="selectedDemandOption?.timezone
+              ? `来自 Demand：${selectedDemandOption.timezone}`
+              : undefined"
+          >
             <USelectMenu
               v-model="timezone"
               :items="timezoneOptions"
@@ -291,7 +341,7 @@ async function submit() {
               label-key="label"
               placeholder="选择 Timezone"
               :clear="true"
-              :disabled="isShortageMode"
+              :disabled="isShortageMode || Boolean(selectedDemandOption?.timezone)"
             />
           </UFormField>
 

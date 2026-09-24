@@ -2,14 +2,22 @@
 import type { NavigationMenuItem } from '@nuxt/ui'
 
 const links = [[{
-  label: '数据接入',
-  icon: 'i-lucide-database',
+  label: '媒体平台开通',
+  icon: 'i-lucide-plug',
   to: '/settings',
   exact: true
+}, {
+  label: '同步运维',
+  icon: 'i-lucide-activity',
+  to: '/settings/sync'
 }, {
   label: '产品与客户',
   icon: 'i-lucide-package',
   to: '/settings/products'
+}, {
+  label: '渠道',
+  icon: 'i-lucide-git-branch',
+  to: '/settings/channels'
 }, {
   label: '组织与成员',
   icon: 'i-lucide-users',
@@ -32,7 +40,7 @@ const links = [[{
   to: '/settings/logs/operations'
 }, {
   label: '同步日志',
-  icon: 'i-lucide-refresh-cw',
+  icon: 'i-lucide-activity',
   to: '/settings/logs/sync'
 }]] satisfies NavigationMenuItem[][]
 </script>

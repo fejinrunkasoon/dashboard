@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useBatchImport } from '~/composables/useBatchImport'
 
-useSeoMeta({ title: '数据导入' })
+useSeoMeta({ title: '文件导入' })
 
 const toast = useToast()
 
@@ -116,7 +116,7 @@ async function onRevalidate() {
 <template>
   <UDashboardPanel grow>
     <template #header>
-      <UDashboardNavbar title="数据导入" :ui="{ right: 'gap-3' }">
+      <UDashboardNavbar title="文件导入" :ui="{ right: 'gap-3' }">
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
@@ -128,6 +128,22 @@ async function onRevalidate() {
 
     <template #body>
       <div class="p-4 space-y-6">
+        <UAlert
+          color="info"
+          variant="subtle"
+          icon="i-lucide-info"
+          title="次要进户通道"
+          class="mb-2"
+        >
+          <template #description>
+            推荐使用
+            <NuxtLink to="/accounts/connections" class="text-primary underline">
+              平台连接
+            </NuxtLink>
+            （OAuth → 发现 → 选择 → 导入）。本页 CSV 仅用于无 OAuth 时的补录或批量修正。
+          </template>
+        </UAlert>
+
         <div
           v-if="errorMessage"
           class="rounded-lg border border-error/30 bg-error/5 p-4 text-sm text-error"

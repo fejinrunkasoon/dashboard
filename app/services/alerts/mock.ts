@@ -289,5 +289,82 @@ export const alertService: AlertService = {
       }
     }
     return count
+  },
+
+  async ensureChannelBalanceAlerts(channelId, summaries, threshold) {
+    const ts = nowIso()
+    const enabled = new Set(threshold.enabledTags)
+
+    for (const summary of summaries) {
+      const alertId = `al-balance-${channelId}-${summary.ownership}`
+      const existing = alerts.find(
+        item => item.id === alertId || (
+          item.type === 'CHANNEL_BALANCE_LOW'
+          && item.entityId === channelId
+          && item.description.includes(summary.ownership)
+          && OPEN_STATUSES.has(item.status)
+        )
+      )
+
+      if (!enabled.has(summary.ownership)) {
+        if (existing && OPEN_STATUSES.has(existing.status)) {
+          existing.status = 'RESOLVED'
+          existing.resolvedAt = ts
+          existing.resolutionNote = 'Tag not monitored'
+        }
+        continue
+      }
+
+      const absHit = threshold.absoluteBalanceBelow != null
+        && summary.remaining < threshold.absoluteBalanceBelow
+      const runwayHit = threshold.daysOfRunwayBelow != null
+        && summary.runwayDays != null
+        && summary.runwayDays < threshold.daysOfRunwayBelow
+      const breached = absHit || runwayHit
+
+      const tagLabel = summary.ownership === 'INTERNAL' ? '自家' : '外接'
+      const description
+        = `${tagLabel}池剩余 ${summary.remaining.toFixed(2)}`
+          + (summary.runwayDays != null
+            ? ` · 预计可用 ${summary.runwayDays.toFixed(1)} 天`
+            : '')
+          + (absHit ? ` · 低于金额阈值 ${threshold.absoluteBalanceBelow}` : '')
+          + (runwayHit ? ` · 低于天数阈值 ${threshold.daysOfRunwayBelow}` : '')
+
+      if (!breached) {
+        if (existing && OPEN_STATUSES.has(existing.status)) {
+          existing.status = 'RESOLVED'
+          existing.resolvedAt = ts
+          existing.resolutionNote = 'Balance recovered above threshold'
+        }
+        continue
+      }
+
+      if (existing) {
+        existing.description = description
+        existing.severity = threshold.severity
+        existing.title = `渠道余额不足（${tagLabel}）`
+        continue
+      }
+
+      alerts.push({
+        id: alertId,
+        type: 'CHANNEL_BALANCE_LOW',
+        severity: threshold.severity,
+        entityType: 'Channel',
+        entityId: channelId,
+        title: `渠道余额不足（${tagLabel}）`,
+        description,
+        status: 'OPEN',
+        assigneeUserId: null,
+        detectedAt: ts,
+        resolvedAt: null,
+        relatedDemandId: null,
+        relatedDemandItemId: null,
+        relatedChannelOrderId: null,
+        relatedTeamId: null,
+        resolutionNote: null
+      })
+    }
   }
 }

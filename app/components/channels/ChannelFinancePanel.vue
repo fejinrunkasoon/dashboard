@@ -2,7 +2,9 @@
 import type { TableColumn } from '@nuxt/ui'
 import type {
   AccountMonthlySettlement,
+  ChannelBalanceThreshold,
   ChannelMonthlySettlementSummary,
+  ChannelOwnershipFundSummary,
   ChannelPaymentAddress,
   ChannelPrepayment,
   ChannelRefund,
@@ -24,6 +26,8 @@ const props = defineProps<{
   tiersByPolicyId: Record<string, ServiceFeeTier[]>
   policyCodeById: Record<string, string>
   canPay: boolean
+  fundSummaries: ChannelOwnershipFundSummary[]
+  balanceThreshold: ChannelBalanceThreshold | null
 }>()
 
 const emit = defineEmits<{
@@ -39,7 +43,46 @@ const emit = defineEmits<{
   'add-refund': []
   'confirm-refund': [ChannelRefund]
   'reject-refund': [ChannelRefund]
+  'save-threshold': [Partial<ChannelBalanceThreshold>]
 }>()
+
+const draftAbs = ref<number | null>(null)
+const draftDays = ref<number | null>(null)
+const draftLookback = ref(7)
+const draftMonitorInternal = ref(true)
+const draftMonitorExternal = ref(false)
+const draftSeverity = ref<'WARNING' | 'URGENT'>('WARNING')
+
+watch(
+  () => props.balanceThreshold,
+  (t) => {
+    if (!t) return
+    draftAbs.value = t.absoluteBalanceBelow
+    draftDays.value = t.daysOfRunwayBelow
+    draftLookback.value = t.runwayLookbackDays
+    draftMonitorInternal.value = t.enabledTags.includes('INTERNAL')
+    draftMonitorExternal.value = t.enabledTags.includes('EXTERNAL')
+    draftSeverity.value = t.severity
+  },
+  { immediate: true }
+)
+
+function saveThreshold() {
+  const enabledTags: ProductOwnership[] = []
+  if (draftMonitorInternal.value) enabledTags.push('INTERNAL')
+  if (draftMonitorExternal.value) enabledTags.push('EXTERNAL')
+  emit('save-threshold', {
+    absoluteBalanceBelow: draftAbs.value != null && draftAbs.value >= 0 ? draftAbs.value : null,
+    daysOfRunwayBelow: draftDays.value != null && draftDays.value >= 0 ? draftDays.value : null,
+    runwayLookbackDays: Math.max(1, draftLookback.value || 7),
+    enabledTags,
+    severity: draftSeverity.value
+  })
+}
+
+function fundFor(ownership: ProductOwnership) {
+  return props.fundSummaries.find(item => item.ownership === ownership) ?? null
+}
 
 function maskAddress(value: string): string {
   if (value.length <= 12) return value
@@ -113,6 +156,100 @@ const policyColumns: TableColumn<ServiceFeePolicy>[] = [
 
 <template>
   <div class="space-y-6">
+    <section class="space-y-3">
+      <h3 class="text-sm font-medium text-highlighted">
+        标签共享池（打款 − 退款分摊 − 结算消耗）
+      </h3>
+      <p class="text-xs text-muted">
+        按自家/外接标签汇总渠道打款；账户按当前产品归属消耗对应池。有效可消耗 = min(账户额度剩余, 池剩余)。
+      </p>
+      <div class="grid sm:grid-cols-2 gap-3">
+        <div
+          v-for="tag in (['INTERNAL', 'EXTERNAL'] as const)"
+          :key="tag"
+          class="rounded-lg border border-default p-3 space-y-2"
+        >
+          <p class="text-xs font-medium text-highlighted">
+            {{ ownershipLabel(tag) }}池
+          </p>
+          <template v-if="fundFor(tag)">
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <p class="text-muted">打款</p>
+                <p class="font-mono">{{ formatCurrency(fundFor(tag)!.prepaid) }}</p>
+              </div>
+              <div>
+                <p class="text-muted">结算消耗</p>
+                <p class="font-mono">{{ formatCurrency(fundFor(tag)!.settlementCost) }}</p>
+              </div>
+              <div>
+                <p class="text-muted">退款分摊</p>
+                <p class="font-mono">{{ formatCurrency(fundFor(tag)!.refunded) }}</p>
+              </div>
+              <div>
+                <p class="text-muted">剩余可消耗</p>
+                <p class="font-mono text-highlighted">{{ formatCurrency(fundFor(tag)!.remaining) }}</p>
+              </div>
+            </div>
+            <p v-if="fundFor(tag)!.runwayDays != null" class="text-[11px] text-muted">
+              预计可用约 {{ fundFor(tag)!.runwayDays!.toFixed(1) }} 天
+            </p>
+          </template>
+          <p v-else class="text-xs text-muted">
+            —
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="space-y-3 rounded-lg border border-default p-3">
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h3 class="text-sm font-medium text-highlighted">
+            余额健康阈值
+          </h3>
+          <p class="text-xs text-muted">
+            跌破金额或预计可用天数时生成 CHANNEL_BALANCE_LOW 预警
+          </p>
+        </div>
+        <UButton
+          label="保存阈值"
+          size="xs"
+          color="primary"
+          @click="saveThreshold"
+        />
+      </div>
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <UFormField label="金额阈值">
+          <UInput v-model.number="draftAbs" type="number" :min="0" placeholder="如 1000" />
+        </UFormField>
+        <UFormField label="天数阈值">
+          <UInput v-model.number="draftDays" type="number" :min="0" placeholder="如 5" />
+        </UFormField>
+        <UFormField label="日均回看天数">
+          <UInput v-model.number="draftLookback" type="number" :min="1" />
+        </UFormField>
+        <UFormField label="严重级别">
+          <USelect
+            v-model="draftSeverity"
+            :items="[
+              { label: 'WARNING', value: 'WARNING' },
+              { label: 'URGENT', value: 'URGENT' }
+            ]"
+            value-key="value"
+            label-key="label"
+            class="w-full"
+          />
+        </UFormField>
+      </div>
+      <div class="flex flex-wrap gap-4 text-sm">
+        <UCheckbox v-model="draftMonitorInternal" label="监控自家池" />
+        <UCheckbox v-model="draftMonitorExternal" label="监控外接池" />
+      </div>
+    </section>
+
+    <USeparator />
+
     <section class="space-y-3">
       <h3 class="text-sm font-medium text-highlighted">
         月度结算（{{ settlementYear }}-{{ String(settlementMonth).padStart(2, '0') }}）

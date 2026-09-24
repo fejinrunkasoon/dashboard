@@ -49,17 +49,21 @@ const links = computed(() => [[{
   defaultOpen: true,
   type: 'trigger' as const,
   children: [{
-    label: '数据接入',
+    label: '媒体平台开通',
     to: '/settings',
     exact: true,
     onSelect: close
   }, {
-    label: '媒体同步',
+    label: '同步运维',
     to: '/settings/sync',
     onSelect: close
   }, {
     label: '产品与客户',
     to: '/settings/products',
+    onSelect: close
+  }, {
+    label: '渠道开通与维护',
+    to: '/settings/channels',
     onSelect: close
   }, {
     label: '组织与成员',

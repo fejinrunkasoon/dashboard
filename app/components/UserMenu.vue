@@ -8,24 +8,43 @@ defineProps<{
 const colorMode = useColorMode()
 const appConfig = useAppConfig()
 
+const {
+  user: currentUser,
+  switchableUsers,
+  setUser
+} = useCurrentUser()
+
 const colors = ['red', 'orange', 'amber', 'yellow', 'lime', 'green', 'emerald', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose']
 const neutrals = ['slate', 'gray', 'zinc', 'neutral', 'stone', 'taupe', 'mauve', 'mist', 'olive']
 
-const user = ref({
-  name: '管理员',
+const user = computed(() => ({
+  name: currentUser.value?.displayName ?? '用户',
   avatar: {
-    src: 'https://i.pravatar.cc/128?u=admin',
-    alt: '管理员'
+    src: `https://i.pravatar.cc/128?u=${currentUser.value?.id ?? 'admin'}`,
+    alt: currentUser.value?.displayName ?? '用户'
   }
-})
+}))
 
 const items = computed<DropdownMenuItem[][]>(() => ([[{
   type: 'label',
   label: user.value.name,
   avatar: user.value.avatar
 }], [{
-  label: '个人设置',
-  icon: 'i-lucide-user'
+  label: '切换身份（Mock）',
+  icon: 'i-lucide-users',
+  children: switchableUsers.value.map(u => ({
+    label: `${u.displayName} · ${u.roles.join(',')}`,
+    type: 'checkbox' as const,
+    checked: currentUser.value?.id === u.id,
+    onSelect: (e: Event) => {
+      e.preventDefault()
+      setUser(u.id)
+    }
+  }))
+}], [{
+  label: '平台连接',
+  icon: 'i-lucide-link',
+  to: '/accounts/connections'
 }, {
   label: '系统设置',
   icon: 'i-lucide-settings',
@@ -47,7 +66,7 @@ const items = computed<DropdownMenuItem[][]>(() => ([[{
       slot: 'chip',
       checked: appConfig.ui.colors.primary === color,
       type: 'checkbox',
-      onSelect: (e) => {
+      onSelect: (e: Event) => {
         e.preventDefault()
         appConfig.ui.colors.primary = color
       }
@@ -66,7 +85,7 @@ const items = computed<DropdownMenuItem[][]>(() => ([[{
       slot: 'chip',
       type: 'checkbox',
       checked: appConfig.ui.colors.neutral === color,
-      onSelect: (e) => {
+      onSelect: (e: Event) => {
         e.preventDefault()
         appConfig.ui.colors.neutral = color
       }

@@ -1,0 +1,2564 @@
+# 多媒体广告数据接入与账户权限体系整改方案 V2
+
+版本：V2.0  
+适用范围：Meta Ads / Google Ads / TikTok Ads / Snapchat Ads，后续可扩展其他媒体  
+核心场景：广告数据 Read-only 接入、Dashboard、账户管理、AI 分析  
+整改目标：从当前“Connector 配置驱动”模式，升级为“多租户、多平台、多授权、多账户、可追溯、可授权”的媒体数据基础设施。
+
+---
+
+## 1. 本次整改要解决什么
+
+当前系统已经存在：
+
+```text
+Media Platform
+Connector
+Asset Type
+Credential
+DEMAND
+ACCOUNT_MAP
+媒体同步
+账户中心
+Team
+User
+日志
+```
+
+底层已经有一定平台抽象，但当前最大问题是：
+
+```text
+平台怎么接
+客户怎么授权
+发现了哪些账户
+哪些账户正式进入系统
+账户属于谁
+哪些用户能看到
+数据通过哪个授权同步
+```
+
+这些不同职责被混合在了一起。
+
+最终系统应该回答下面所有问题：
+
+```text
+1. 系统支持哪些媒体平台？
+
+2. 当前 Organization/Team 连接了哪些平台？
+
+3. Meta 是否可以连接多次？
+   → 可以
+
+4. 一次 Meta OAuth 是否可以发现多个广告账户？
+   → 可以
+
+5. 同一个广告账户能否被多个 OAuth Connection 发现？
+   → 可以
+
+6. 这个账户是谁接入系统的？
+   → 可追踪
+
+7. 当前通过哪个 Credential 同步？
+   → 可追踪
+
+8. 这个账户属于哪个客户？
+   → 可追踪
+
+9. 目前由哪个 Team 管理？
+   → 可追踪
+
+10. Team Manager 能看到什么？
+    → Team 全部账户
+
+11. Team Member 能看到什么？
+    → 自己接入 + 被分配的账户
+
+12. Dashboard 能看到什么？
+    → 当前用户有权限的账户
+
+13. AI 能分析什么？
+    → 当前用户有权限的数据
+
+14. 谁执行了授权/分配/断开/重新授权？
+    → Audit Log 可追踪
+```
+
+这就是整改后的系统边界。
+
+---
+
+# 2. 核心设计原则
+
+整个整改按照 8 个原则执行。
+
+## 原则 1：平台能力和客户接入必须分离
+
+现有：
+
+```text
+数据接入
+→ Connector
+→ Credential
+→ Asset Type
+→ Field
+```
+
+实际上混合了两层东西。
+
+整改为：
+
+```text
+Control Plane
+平台能力配置
+
+Tenant Plane
+客户实际数据接入
+```
+
+Control Plane 解决：
+
+```text
+系统“会不会接 Meta”
+```
+
+Tenant Plane 解决：
+
+```text
+Nike 的 Team A “有没有接 Meta”
+```
+
+两者绝对不能混淆。
+
+---
+
+# 3. 原则 2：Platform ≠ Connection ≠ Account
+
+这是整个系统最重要的领域模型。
+
+```text
+Platform
+    │
+    │ 1:N
+    ↓
+Connection
+    │
+    │ N:N
+    ↓
+Media Account
+```
+
+Platform：
+
+```text
+META
+GOOGLE
+TIKTOK
+SNAPCHAT
+```
+
+代表系统支持的平台。
+
+Connection：
+
+```text
+某个用户代表某个组织/团队
+完成的一次平台授权
+```
+
+例如：
+
+```text
+Meta - 王五
+Meta - Agency
+Google - US MCC
+TikTok - 张三
+```
+
+Media Account：
+
+```text
+真正的广告账户
+```
+
+例如：
+
+```text
+Meta Ad Account 123456
+Google Customer 123-456-7890
+TikTok Advertiser 987654
+```
+
+三者不允许合并为一个概念。
+
+---
+
+# 4. 原则 3：Connection 是授权渠道，不是业务资产
+
+例如：
+
+```text
+王五
+↓ OAuth
+Meta Connection C001
+↓
+Meta Account A
+```
+
+未来王五离职：
+
+```text
+C001 → REVOKED
+```
+
+后来张三 OAuth：
+
+```text
+C002
+↓
+Meta Account A
+```
+
+Account A：
+
+```text
+ID
+Campaign
+历史 Metrics
+Dashboard
+AI Context
+```
+
+不能因此改变。
+
+因此：
+
+```text
+Connection
+= 数据访问通道
+
+Media Account
+= 企业业务资产
+```
+
+必须解耦。
+
+---
+
+# 5. 原则 4：OAuth 权限与系统用户权限严格分离
+
+整个权限模型分三层：
+
+```text
+Layer 1
+Provider Authorization
+
+Meta / Google / TikTok
+决定 Connection 能读取什么。
+
+
+Layer 2
+Tenant Ownership
+
+你的系统
+决定数据属于哪个 Organization。
+
+
+Layer 3
+Application Authorization
+
+你的系统
+决定 Team / User 能看到什么。
+```
+
+OAuth 不能代替 RBAC。
+
+RBAC 也不能扩大 OAuth 的 Provider 权限。
+
+最终权限实际是：
+
+```text
+最终可访问数据
+
+=
+Provider允许读取
+∩
+Organization拥有
+∩
+User有权访问
+```
+
+---
+
+# 6. 原则 5：Organization 是强数据边界
+
+推荐：
+
+```text
+Organization
+= Tenant
+```
+
+核心业务数据必须归属于 Organization。
+
+例如：
+
+```text
+Connection
+Media Account
+Campaign
+Ad Group
+Ad
+Metrics
+```
+
+都必须能够沿关系追溯到：
+
+```text
+organization_id
+```
+
+禁止：
+
+```text
+Organization A
+```
+
+通过 API、Dashboard、Export、AI 获取：
+
+```text
+Organization B
+```
+
+的数据。
+
+这是最高优先级的数据隔离规则。
+
+---
+
+# 7. 原则 6：Team 是管理边界，User Assignment 是访问边界
+
+不要简单：
+
+```text
+Account.user_id
+```
+
+应该：
+
+```text
+Organization
+   ↓
+Team
+   ↓
+Account
+
+User
+   ↓
+Account Assignment
+```
+
+一个 Account 可以：
+
+```text
+属于 Team A 管理
+```
+
+同时被：
+
+```text
+王五
+李四
+张三
+```
+
+共同访问。
+
+---
+
+# 8. 原则 7：所有数据使用必须经过统一权限层
+
+以下全部禁止自己写一套权限：
+
+```text
+账户中心
+Dashboard
+Analytics
+Export
+Reporting API
+AI
+```
+
+统一经过：
+
+```text
+Account Access Service
+```
+
+例如：
+
+```text
+getAccessibleAccountIds(user)
+```
+
+所有业务模块都使用它。
+
+尤其：
+
+```text
+AI
+```
+
+不允许直接查询全库。
+
+---
+
+# 9. 原则 8：Provider Raw Data 与业务数据分离
+
+Meta 给你的东西是：
+
+```text
+Meta Data
+```
+
+你的：
+
+```text
+Team
+Member
+Product
+Channel
+Fee Policy
+Account Manager
+```
+
+不是 Meta 数据。
+
+因此必须区分：
+
+```text
+Provider Data
+Business Metadata
+Derived Data
+```
+
+避免未来平台同步覆盖内部业务数据。
+
+---
+
+# 10. 整改后的总体架构
+
+建议形成：
+
+```text
+              PLATFORM REGISTRY
+                     │
+       ┌─────────────┼─────────────┐
+       ↓             ↓             ↓
+     Meta          Google        TikTok
+       │             │             │
+       └─────────────┼─────────────┘
+                     ↓
+                 CONNECTION
+                     │
+                     ↓
+           CONNECTION ACCOUNT
+                     │
+                     ↓
+                MEDIA ACCOUNT
+                     │
+          ┌──────────┴──────────┐
+          ↓                     ↓
+     ACCOUNT TEAM          ASSIGNMENTS
+          │                     │
+          ↓                     ↓
+        TEAM                  USER
+                     │
+                     ↓
+                 CAMPAIGN
+                     ↓
+                  AD GROUP
+                     ↓
+                    AD
+                     ↓
+                  METRICS
+```
+
+外围：
+
+```text
+Connection
+    ↓
+Secret Store
+
+所有操作
+    ↓
+Audit Log
+
+所有同步
+    ↓
+Sync Job / Sync Log
+```
+
+---
+
+# 11. Control Plane 整改
+
+你目前截图里的：
+
+```text
+系统管理
+→ 数据接入
+```
+
+不要删除底层能力。
+
+但是必须重新定位为：
+
+```text
+系统管理
+→ 平台集成配置
+```
+
+仅：
+
+```text
+SUPER_ADMIN
+PLATFORM_ADMIN
+Developer
+```
+
+可见。
+
+这里负责定义：
+
+```text
+平台
+Connector Implementation
+OAuth Capability
+Supported Asset Types
+Provider Schema
+API Version
+Field Mapping
+Capabilities
+```
+
+例如：
+
+```text
+Meta
+
+Connector:
+MetaConnector
+
+Auth:
+OAuth2
+
+Capabilities:
+Account Discovery
+Campaign Read
+AdSet Read
+Ad Read
+Insights Read
+```
+
+普通 Team Manager / Member 完全不应该进入这里。
+
+---
+
+# 12. 去掉面向业务用户的底层概念
+
+业务 UI 不再出现：
+
+```text
+implKey
+MediaPlatform
+Asset Type
+DEMAND
+ACCOUNT_MAP
+Source Key
+Credential Schema
+Mock Credential
+Connector Implementation
+```
+
+这些全部属于 implementation detail。
+
+---
+
+# 13. Tenant Plane 新增“平台连接”
+
+建议：
+
+```text
+账户中心
+├ 全部账户
+├ 平台连接
+├ 账户分配
+├ 数据同步
+└ 账户分析
+```
+
+或者保留目前导航，但新增：
+
+```text
+账户中心
+→ 平台连接
+```
+
+---
+
+# 14. 平台连接首页
+
+页面显示：
+
+```text
+平台连接
+
+Meta Ads
+2 个连接
+18 个广告账户
+[+ 添加连接]
+
+Google Ads
+1 个连接
+12 个广告账户
+[+ 添加连接]
+
+TikTok Ads
+未连接
+[连接 TikTok Ads]
+```
+
+展开 Meta：
+
+```text
+Meta - 王五
+● 正常
+
+所属团队      Team A
+授权人        王五
+授权时间      2026-09-15
+账户          12
+最近同步      8分钟前
+
+[管理]
+
+
+Meta - Agency
+● 需要重新授权
+
+所属团队      Team A
+授权人        张三
+账户          6
+
+[重新授权]
+```
+
+---
+
+# 15. OAuth 标准接入流程
+
+所有平台 UI 必须尽量统一。
+
+```text
+Step 1
+选择平台
+
+      ↓
+
+Step 2
+确认接入 Team
+
+      ↓
+
+Step 3
+跳转 Provider OAuth
+
+      ↓
+
+Step 4
+OAuth Callback
+
+      ↓
+
+Step 5
+创建 Connection
+
+      ↓
+
+Step 6
+Discover Accounts
+
+      ↓
+
+Step 7
+用户选择需要正式接入的 Accounts
+
+      ↓
+
+Step 8
+Import Accounts
+
+      ↓
+
+Step 9
+默认分配给接入人
+
+      ↓
+
+Step 10
+Initial Sync
+
+      ↓
+
+ACTIVE
+```
+
+---
+
+# 16. “OAuth 成功”和“账户接入成功”不是一个状态
+
+需要明确区分：
+
+```text
+OAuth Success
+```
+
+只是：
+
+```text
+你的系统获得了访问 Provider 的能力。
+```
+
+之后还需要：
+
+```text
+Discover
+Select
+Import
+Sync
+```
+
+所以不能 OAuth Callback 后直接告诉用户：
+
+```text
+接入完成
+```
+
+应该：
+
+```text
+Meta 授权成功
+
+发现 23 个广告账户。
+
+请选择需要接入系统的账户。
+```
+
+---
+
+# 17. Account Discovery
+
+例如：
+
+```text
+发现 Meta Ads 账户
+
+搜索...
+
+☑ US Brand Main
+  act_123456
+  USD
+  GMT-5
+
+☑ UK Brand Main
+  act_234567
+  GBP
+  GMT+0
+
+□ Agency Client A
+  act_345678
+
+□ Test Account
+  act_456789
+
+已选择 2 / 23
+
+[接入所选账户]
+```
+
+Discovery 不等于 Import。
+
+这个区别要进入 Domain Model。
+
+---
+
+# 18. Connection 与 Account 必须 N:N
+
+增加：
+
+```text
+connection_accounts
+```
+
+不能只：
+
+```text
+media_account.connection_id
+```
+
+因为：
+
+```text
+Connection A ─┐
+              ├→ Account 123
+Connection B ─┘
+```
+
+完全可能发生。
+
+建议：
+
+```text
+connection_accounts
+
+id
+organization_id
+
+connection_id
+media_account_id
+
+provider_access_status
+
+sync_enabled
+is_primary_sync_source
+
+discovered_at
+last_verified_at
+
+created_at
+updated_at
+```
+
+---
+
+# 19. Media Account 唯一性
+
+Account 身份不能依赖 Connection。
+
+建议逻辑唯一键：
+
+```text
+organization_id
++
+platform
++
+external_account_id
+```
+
+例如：
+
+```text
+org_001
+META
+123456789
+```
+
+代表企业内唯一 Media Account。
+
+Connection A 第二次发现它：
+
+```text
+不要再次 CREATE Account
+```
+
+而是：
+
+```text
+建立新的 connection_accounts relationship
+```
+
+---
+
+# 20. 核心数据库模型
+
+下面作为整改目标模型。
+
+`media_platforms`
+
+```text
+id
+code
+
+META
+GOOGLE
+TIKTOK
+SNAPCHAT
+
+display_name
+status
+```
+
+---
+
+`media_connections`
+
+```text
+id
+
+organization_id
+team_id
+
+platform_id
+
+display_name
+
+authorized_by_user_id
+
+status
+
+provider_identity_id
+provider_identity_name
+
+scopes
+
+authorized_at
+expires_at
+
+last_verified_at
+last_sync_at
+
+created_at
+updated_at
+```
+
+---
+
+`connection_secrets`
+
+```text
+connection_id
+
+access_token_encrypted
+refresh_token_encrypted
+
+token_expires_at
+
+secret_version
+updated_at
+```
+
+生产条件允许时逐步迁移至：
+
+```text
+KMS
+Secret Manager
+Vault
+```
+
+---
+
+`media_accounts`
+
+```text
+id
+
+organization_id
+
+platform_id
+external_account_id
+
+external_parent_id
+
+name
+currency
+timezone
+
+provider_status
+
+metadata_json
+
+first_discovered_at
+last_provider_sync_at
+
+created_at
+updated_at
+```
+
+---
+
+`connection_accounts`
+
+```text
+id
+
+organization_id
+connection_id
+media_account_id
+
+provider_access_status
+
+sync_enabled
+is_primary_sync_source
+
+discovered_at
+last_verified_at
+last_successful_sync_at
+
+created_at
+updated_at
+```
+
+---
+
+# 21. Team 与 Account 关系
+
+不要把一个动态管理关系完全写死在 OAuth Connection 上。
+
+建议：
+
+```text
+team_accounts
+
+organization_id
+team_id
+media_account_id
+
+status
+
+assigned_by
+assigned_at
+```
+
+这代表：
+
+```text
+哪个 Team 负责这个 Account。
+```
+
+如果业务明确规定一个账户只能属于一个团队，可以在应用层/数据库约束成单 Team。
+
+如果未来允许：
+
+```text
+Team A
+Team B
+```
+
+共同管理一个账户，这个模型也支持。
+
+---
+
+# 22. User 与 Account 关系
+
+建立：
+
+```text
+account_assignments
+```
+
+建议：
+
+```text
+id
+
+organization_id
+
+media_account_id
+user_id
+
+assignment_type
+
+assigned_by_user_id
+assigned_at
+
+status
+```
+
+`assignment_type` 第一版：
+
+```text
+IMPORTED_BY
+ASSIGNED
+```
+
+未来可以升级：
+
+```text
+OWNER
+MANAGER
+ANALYST
+VIEWER
+```
+
+但目前 Read-only 系统不要过度设计权限颗粒度。
+
+---
+
+# 23. 用户接入账户后的默认行为
+
+假设：
+
+```text
+王五
+Team A Member
+```
+
+接入：
+
+```text
+Meta A
+Meta B
+```
+
+系统自动：
+
+```text
+team_accounts
+
+A → Team A
+B → Team A
+```
+
+同时：
+
+```text
+account_assignments
+
+A → 王五 → IMPORTED_BY
+B → 王五 → IMPORTED_BY
+```
+
+因此王五立即能看到自己的账户。
+
+Team Manager 不需要额外 Assignment。
+
+因为：
+
+```text
+Team Manager
+→ Team Accounts
+```
+
+自动拥有访问权。
+
+---
+
+# 24. 正式权限矩阵
+
+第一版建议保持简单。
+
+```text
+Organization Admin
+→ Organization 所有 Account
+
+Team Manager
+→ 所管理 Team 的所有 Account
+
+Team Member
+→ 自己接入的 Account
+  +
+  被 Assignment 分配的 Account
+```
+
+如果用户同时属于多个 Team，则将可访问范围求 Union。
+
+平台 Connection 的管理权限应另外判断，不要因为用户能看 Account，就默认允许他重授权/断开别人的 Connection。
+
+---
+
+# 25. 建立统一 Account Access Service
+
+这是本次整改技术上最重要的部分之一。
+
+禁止：
+
+```text
+AccountController 自己判断
+DashboardService 自己判断
+AIService 自己判断
+ExportService 自己判断
+```
+
+统一：
+
+```text
+AccountAccessService
+```
+
+提供类似：
+
+```text
+getAccessibleAccountIds(userId)
+
+canViewAccount(userId, accountId)
+
+canManageAccount(userId, accountId)
+
+canAssignAccount(userId, accountId)
+
+canManageConnection(userId, connectionId)
+```
+
+以后所有业务模块调用这一层。
+
+---
+
+# 26. 账户中心整改
+
+你现在截图中的账户中心基本框架可以保留。
+
+但需要明确各字段来源。
+
+第一类：Provider Data。
+
+```text
+账户 ID
+账户名称
+媒体
+时区
+币种
+媒体状态
+Provider Parent
+Spend Limit（平台支持时）
+```
+
+来源：
+
+```text
+Meta
+Google
+TikTok
+```
+
+第二类：Internal Business Data。
+
+```text
+渠道
+产品
+团队
+成员
+户管
+费率政策
+资产状态
+备注
+```
+
+来源：
+
+```text
+你的业务数据库
+```
+
+第三类：Derived Data。
+
+```text
+周期消耗
+剩余额度
+趋势
+异常
+Performance
+```
+
+来源：
+
+```text
+Metrics
++
+业务规则
+```
+
+代码层也应该尽量避免三类数据互相覆盖。
+
+---
+
+# 27. 账户中心根据用户自动过滤
+
+例如：
+
+```text
+GET /media-accounts
+```
+
+Backend：
+
+```text
+Authenticated User
+        ↓
+AccountAccessService
+        ↓
+Accessible Account IDs
+        ↓
+MediaAccount Query
+```
+
+不允许前端传：
+
+```text
+teamId=TeamA
+```
+
+就认为用户有 Team A 权限。
+
+服务端必须自行验证。
+
+---
+
+# 28. Team Manager 的账户页面
+
+主管可以看到：
+
+```text
+Team A Accounts
+
+Account       Platform    接入人     成员
+------------------------------------------------
+Meta US       Meta        王五       王五、李四
+Google US     Google      李四       李四
+TikTok UK     TikTok      陈明       陈明、王五
+```
+
+主管可：
+
+```text
+分配成员
+取消分配
+查看同步状态
+查看数据
+```
+
+是否允许：
+
+```text
+断开 Connection
+重新 OAuth
+```
+
+建议单独使用 Connection Management 权限，不要和 Account Manager 混为一谈。
+
+---
+
+# 29. Team Member 的账户中心
+
+成员看到：
+
+```text
+我的账户
+
+Meta US
+来源：我接入
+
+Google US
+来源：主管分配
+
+TikTok UK
+来源：主管分配
+```
+
+不显示团队中未分配给他的其他 Account。
+
+API 层也不能返回。
+
+不是单纯前端隐藏。
+
+---
+
+# 30. Connection 权限不能与 Account 权限混用
+
+这是一个容易忽视的安全问题。
+
+例如：
+
+```text
+王五 OAuth
+→ Meta Connection
+→ Account A
+```
+
+主管把：
+
+```text
+Account A
+```
+
+分给李四。
+
+李四应该能：
+
+```text
+查看 Account A
+查看 Account A Dashboard
+使用 AI 分析 Account A
+```
+
+但不意味着李四可以：
+
+```text
+查看王五 Token
+断开王五 Connection
+重新授权王五身份
+```
+
+因此：
+
+```text
+Account Permission
+```
+
+与：
+
+```text
+Connection Permission
+```
+
+必须独立。
+
+---
+
+# 31. Credential 整改
+
+你当前 Mock Credential 应退出生产用户流程。
+
+状态从：
+
+```text
+DRAFT
+MOCK_CONNECTED
+EXPIRED
+REVOKED
+```
+
+逐渐升级为 Connection 状态。
+
+建议：
+
+```text
+PENDING_AUTH
+ACTIVE
+REAUTH_REQUIRED
+EXPIRED
+REVOKED
+DISCONNECTED
+ERROR
+```
+
+开发环境可以继续：
+
+```text
+MOCK
+```
+
+但 UI 明确标识：
+
+```text
+TEST ONLY
+```
+
+并禁止进入生产真实数据链。
+
+---
+
+# 32. Account 状态与 Connection 状态分开
+
+禁止只有一个：
+
+```text
+ACTIVE
+```
+
+状态描述所有东西。
+
+至少区分：
+
+```text
+Connection Status
+
+ACTIVE
+REAUTH_REQUIRED
+REVOKED
+...
+```
+
+与：
+
+```text
+Provider Account Status
+
+ACTIVE
+DISABLED
+SUSPENDED
+CLOSED
+UNKNOWN
+```
+
+以及：
+
+```text
+Internal Account Status
+
+ACTIVE
+ARCHIVED
+DISABLED
+```
+
+这样你现在截图里的：
+
+```text
+资产状态
+媒体状态
+```
+
+才真正拥有清晰语义。
+
+---
+
+# 33. 同步架构整改
+
+数据流：
+
+```text
+Provider API
+     ↓
+Connection
+     ↓
+Media Account
+     ↓
+Sync Job
+     ↓
+Raw Provider Data
+     ↓
+Normalizer
+     ↓
+Unified Ads Model
+     ↓
+Analytics
+     ↓
+Dashboard / AI
+```
+
+不要：
+
+```text
+Dashboard
+↓
+实时调用 Meta API
+```
+
+Dashboard 应主要查询你自己的数据库/仓库。
+
+---
+
+# 34. 同步源选择
+
+由于：
+
+```text
+一个 Account
+```
+
+可能存在：
+
+```text
+多个 Connection
+```
+
+因此需要 Primary Sync Source。
+
+例如：
+
+```text
+Account A
+
+Connection 1   ACTIVE     PRIMARY
+Connection 2   ACTIVE
+```
+
+如果 Primary：
+
+```text
+REAUTH_REQUIRED
+```
+
+后续可以支持：
+
+```text
+Connection 2
+```
+
+作为替代访问通道。
+
+第一版不必自动切换，可以：
+
+```text
+标记异常
+→ 管理员手工切换
+```
+
+后续再做自动 failover。
+
+---
+
+# 35. 数据模型必须保留 External ID
+
+统一对象建议：
+
+```text
+campaigns
+
+id
+organization_id
+media_account_id
+
+platform_id
+
+external_campaign_id
+
+name
+status
+...
+```
+
+同样：
+
+```text
+ad_groups
+ads
+```
+
+不要把 Provider ID 当数据库 PK。
+
+内部永远使用：
+
+```text
+UUID/internal ID
+```
+
+外部使用：
+
+```text
+external_*_id
+```
+
+---
+
+# 36. Metrics 模型
+
+建议第一版至少：
+
+```text
+ad_metrics_daily
+
+organization_id
+
+media_account_id
+campaign_id
+ad_group_id
+ad_id
+
+date
+
+currency
+
+spend
+impressions
+clicks
+
+conversions
+conversion_value
+
+provider_payload_reference
+
+updated_at
+```
+
+派生：
+
+```text
+CTR
+CPC
+CPM
+CPA
+ROAS
+```
+
+尽量由 Analytics Layer 计算。
+
+---
+
+# 37. 不要过早统一 Conversion 语义
+
+需要明确：
+
+```text
+Meta Conversion
+Google Conversion
+TikTok Conversion
+```
+
+不是天然可比。
+
+应该保留：
+
+```text
+provider
+conversion_type
+attribution setting
+```
+
+否则以后 AI 非常容易得出错误结论。
+
+---
+
+# 38. Audit Log 整改
+
+所有关键动作进入：
+
+```text
+audit_logs
+```
+
+至少：
+
+```text
+organization_id
+team_id
+
+actor_user_id
+
+action
+
+resource_type
+resource_id
+
+before_json
+after_json
+
+ip
+user_agent
+
+created_at
+```
+
+记录：
+
+```text
+CONNECT_PLATFORM
+REAUTHORIZE_CONNECTION
+DISCONNECT_PLATFORM
+
+DISCOVER_ACCOUNT
+IMPORT_ACCOUNT
+
+ASSIGN_ACCOUNT
+UNASSIGN_ACCOUNT
+
+ENABLE_SYNC
+DISABLE_SYNC
+
+CHANGE_PRIMARY_CONNECTION
+
+ARCHIVE_ACCOUNT
+```
+
+---
+
+# 39. Sync Log 与 Audit Log 分开
+
+不要混为：
+
+```text
+日志
+```
+
+Audit Log：
+
+```text
+谁做了什么。
+```
+
+Sync Log：
+
+```text
+系统同步发生了什么。
+```
+
+例如：
+
+```text
+sync_jobs
+
+id
+connection_id
+media_account_id
+
+job_type
+
+started_at
+completed_at
+
+status
+
+records_read
+records_written
+
+error_code
+error_message
+retry_count
+```
+
+这样你目前左侧：
+
+```text
+操作日志
+同步日志
+```
+
+的方向其实是正确的。
+
+---
+
+# 40. Dashboard 权限整改
+
+Dashboard 查询逻辑：
+
+```text
+User
+ ↓
+AccountAccessService
+ ↓
+Accessible Accounts
+ ↓
+Metrics Query
+ ↓
+Dashboard
+```
+
+任何 Dashboard Filter：
+
+```text
+Team
+Account
+Platform
+Campaign
+```
+
+只能在：
+
+```text
+Accessible Scope
+```
+
+内执行。
+
+不能前端通过修改：
+
+```text
+account_id
+```
+
+访问未授权账户。
+
+---
+
+# 41. AI 权限整改
+
+AI 是数据访问层的消费者，不是超级管理员。
+
+必须：
+
+```text
+User Prompt
+    ↓
+Auth Context
+    ↓
+AccountAccessService
+    ↓
+Allowed Account IDs
+    ↓
+Analytics Query
+    ↓
+AI Context
+    ↓
+LLM
+```
+
+例如：
+
+```text
+王五：
+分析最近7天广告表现
+```
+
+AI 只能收到：
+
+```text
+王五 Accessible Accounts
+```
+
+主管说相同一句话，才获得整个 Team 的 Context。
+
+禁止：
+
+```text
+LLM 自己生成 SQL
+→ 无权限 Scope 地执行
+```
+
+即便未来 Text-to-SQL，也必须自动注入 Tenant/Account Scope。
+
+---
+
+# 42. 推荐的 API 结构
+
+平台：
+
+```text
+GET /api/platforms
+```
+
+连接：
+
+```text
+GET    /api/connections
+POST   /api/connections/:platform/authorize
+GET    /api/oauth/:platform/callback
+
+POST   /api/connections/:id/reauthorize
+DELETE /api/connections/:id
+```
+
+Discovery：
+
+```text
+POST /api/connections/:id/discover
+GET  /api/connections/:id/discovered-accounts
+```
+
+Import：
+
+```text
+POST /api/connections/:id/accounts/import
+```
+
+Account：
+
+```text
+GET /api/accounts
+GET /api/accounts/:id
+```
+
+Assignment：
+
+```text
+GET    /api/accounts/:id/assignments
+POST   /api/accounts/:id/assignments
+DELETE /api/accounts/:id/assignments/:userId
+```
+
+Sync：
+
+```text
+POST /api/accounts/:id/sync
+GET  /api/accounts/:id/sync-status
+```
+
+---
+
+# 43. OAuth State 必须包含安全上下文
+
+OAuth 前不要仅仅：
+
+```text
+redirect → Meta
+```
+
+需要产生不可伪造的一次性：
+
+```text
+OAuth State
+```
+
+服务端关联：
+
+```text
+user_id
+organization_id
+team_id
+platform
+nonce
+expires_at
+redirect_after_success
+```
+
+Callback 后根据服务器保存的 State 恢复上下文。
+
+不要直接信任客户端传回来的：
+
+```text
+organizationId
+teamId
+userId
+```
+
+---
+
+# 44. Token 安全
+
+必须：
+
+```text
+Token 不返回前端
+Token 不写普通日志
+Token 不展示给 Admin
+Token 加密存储
+OAuth callback 后由 Backend 管理
+```
+
+同时避免：
+
+```text
+console.log(access_token)
+```
+
+生产环境做好 secret redaction。
+
+---
+
+# 45. 与现有系统的页面整改对应
+
+你现在的：
+
+```text
+系统管理
+→ 数据接入
+```
+
+整改成：
+
+```text
+系统管理
+→ 平台集成配置
+```
+
+仅系统管理员。
+
+---
+
+现在：
+
+```text
+账户中心
+→ 全部账户
+```
+
+保留。
+
+升级为真正：
+
+```text
+Media Account Pool
+```
+
+根据 User Scope 返回数据。
+
+---
+
+新增：
+
+```text
+账户中心
+→ 平台连接
+```
+
+负责：
+
+```text
+OAuth
+Connection
+Discover
+Import
+Reauthorize
+Disconnect
+```
+
+---
+
+现在：
+
+```text
+团队中心
+```
+
+增加：
+
+```text
+团队账户
+账户分配
+```
+
+Team Manager 在这里分配账户。
+
+---
+
+现在：
+
+```text
+媒体同步
+```
+
+保留。
+
+负责：
+
+```text
+Sync Job
+Sync Health
+Sync Errors
+Retry
+```
+
+不负责 OAuth。
+
+---
+
+# 46. 本次不要做的事情
+
+为了控制整改范围，第一阶段不要做：
+
+```text
+广告创建
+Campaign 修改
+Budget 修改
+Ad 开关
+Creative Upload
+Bid Management
+
+自动 Connection Failover
+非常复杂的字段动态 Schema
+跨平台 Attribution
+Marketing Mix Modeling
+复杂的 Field-level Permission
+```
+
+当前核心：
+
+```text
+Read
+Sync
+Ownership
+Assignment
+Authorization
+Audit
+```
+
+把这六件事先做好。
+
+---
+
+# 47. 开发优先级 P0
+
+第一阶段必须先改 Domain Model。
+
+```text
+Organization
+Team
+User
+
+MediaPlatform
+MediaConnection
+ConnectionSecret
+
+MediaAccount
+ConnectionAccount
+
+TeamAccount
+AccountAssignment
+```
+
+同时建立：
+
+```text
+AccountAccessService
+```
+
+这是地基。
+
+不要先重画 UI 再补数据模型。
+
+---
+
+# 48. 开发优先级 P1
+
+打通一个真实 Provider。
+
+建议：
+
+```text
+Meta 或 Google
+```
+
+只做：
+
+```text
+OAuth
+↓
+Connection
+↓
+Discover
+↓
+Select
+↓
+Import
+↓
+Account Center
+```
+
+这时候先不要 Campaign。
+
+验收标准：
+
+```text
+Team A 王五
+能够真实 OAuth
+
+发现 10 个账户
+
+选择 3 个
+
+账户中心出现 3 个
+
+王五能看到
+
+Team Manager 能看到
+
+Team A 其他 Member 看不到
+```
+
+---
+
+# 49. 开发优先级 P2
+
+完成 Assignment。
+
+验收：
+
+```text
+Manager
+↓
+Account A
+↓
+分配给李四
+```
+
+之后：
+
+```text
+李四 GET /accounts
+```
+
+出现 Account A。
+
+取消后立即消失。
+
+同时记录：
+
+```text
+Audit Log
+```
+
+---
+
+# 50. 开发优先级 P3
+
+接入媒体数据结构：
+
+```text
+Campaign
+Ad Group
+Ad
+```
+
+然后：
+
+```text
+Daily Metrics
+```
+
+开始真正服务 Dashboard。
+
+---
+
+# 51. 开发优先级 P4
+
+接入剩余 Provider：
+
+```text
+Meta
+Google
+TikTok
+Snapchat
+...
+```
+
+通过 Adapter：
+
+```text
+MediaConnector
+├ MetaConnector
+├ GoogleConnector
+├ TikTokConnector
+└ SnapchatConnector
+```
+
+Connector 最少统一：
+
+```text
+authorize()
+exchangeToken()
+
+discoverAccounts()
+
+getAccount()
+
+listCampaigns()
+listAdGroups()
+listAds()
+
+getMetrics()
+```
+
+具体 API 差异封装在 Adapter 内。
+
+---
+
+# 52. 开发优先级 P5
+
+最后接：
+
+```text
+Dashboard
+AI
+```
+
+因为这两层应该消费：
+
+```text
+Normalized
+Authorized
+Auditable
+```
+
+的数据，而不是直接绑 Provider API。
+
+---
+
+# 53. 产品验收的核心场景
+
+整改完成后必须能完整演示这一场景：
+
+```text
+Organization: Company A
+
+Team: Performance Team
+
+Manager:
+张三
+
+Members:
+王五
+李四
+```
+
+王五：
+
+```text
+登录
+↓
+Connect Meta
+↓
+OAuth
+↓
+发现 20 Accounts
+↓
+选择 A、B
+↓
+Import
+```
+
+系统：
+
+```text
+Connection C001
+authorized_by = 王五
+
+Account A
+Account B
+
+Team = Performance
+
+Assignment:
+A → 王五
+B → 王五
+```
+
+此时：
+
+```text
+王五 → A、B
+
+李四 → 无
+
+张三 → A、B
+```
+
+张三：
+
+```text
+B
+→ 分配给李四
+```
+
+变成：
+
+```text
+王五 → A、B
+李四 → B
+张三 → A、B
+```
+
+随后：
+
+```text
+王五 Meta Token 失效
+```
+
+系统：
+
+```text
+Connection C001
+→ REAUTH_REQUIRED
+```
+
+但是：
+
+```text
+Account A/B
+```
+
+不能消失，历史 Metrics 不能消失，Assignment 不能消失。
+
+之后张三使用新的 Meta Connection C002，也拥有 Account A/B：
+
+```text
+C002
+↓
+A/B
+```
+
+可以恢复同步。
+
+如果这一整套流程成立，你的核心架构就是健康的。
+
+---
+
+# 54. 最终产品方法论
+
+以后整个系统可以始终用六个问题判断一个设计是否合理：
+
+```text
+WHO
+谁在操作？
+→ User
+
+
+FOR WHOM
+代表谁操作？
+→ Organization / Team
+
+
+THROUGH WHAT
+通过什么获得媒体访问能力？
+→ Connection
+
+
+WHAT ASSET
+获取的是哪个业务资产？
+→ Media Account
+
+
+WHO CAN ACCESS
+谁有权使用这个资产？
+→ Team + Assignment + RBAC
+
+
+WHERE DID DATA COME FROM
+数据是怎么来的？
+→ Platform + Connection + Sync + External ID
+```
+
+任何新功能——包括 Snapchat、Pinterest、Amazon Ads、Microsoft Ads、LinkedIn Ads——都先回答这六个问题，再开始开发。
+
+---
+
+# 55. 最终系统边界
+
+整改完成以后，系统应该形成非常稳定的五层：
+
+```text
+① Provider Layer
+Meta / Google / TikTok / Snapchat
+
+        ↓
+
+② Integration Layer
+Connector / OAuth / Connection / Secret
+
+        ↓
+
+③ Asset Layer
+Media Account / Campaign / AdGroup / Ad
+
+        ↓
+
+④ Governance Layer
+Organization / Team / Assignment
+RBAC / Audit / Access Control
+
+        ↓
+
+⑤ Application Layer
+Account Center
+Dashboard
+Reporting
+Export
+AI
+```
+
+其中最重要的架构纪律是：
+
+```text
+Provider Layer
+不知道你的 Team。
+
+Connector Layer
+不决定谁能看 Dashboard。
+
+Account 本身
+不等于 OAuth Connection。
+
+Team Assignment
+不拥有 Token。
+
+Dashboard
+不直接请求 Provider。
+
+AI
+不绕过 Account Authorization。
+
+OAuth User
+不等于 Account Owner。
+```
+
+这几条一旦守住，未来增加平台、团队、账号数量和 AI 能力时，系统不会越来越乱。
+
+你目前已有的 Connector、Asset Type、Mock Credential、ACCOUNT_MAP 等工作也不需要全部废弃。应该把它们“下沉”为 Platform/Connector Control Plane；然后在其上建立新的 `Connection → ConnectionAccount → MediaAccount → Team/Assignment → Data` 主链。这样属于架构分层整改，而不是推倒重来。

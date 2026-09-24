@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import type { ChannelAccountOrder, PlatformAsset } from '~/domain'
-import { demandService, mediaService } from '~/services'
+import { DEMAND_TIMEZONE_OPTIONS } from '~/domain'
+import { demandService, mediaService, productService } from '~/services'
 
 interface DeliveryRow {
   externalAccountId: string
   name: string
-  timezone: string
+  timezone: string | undefined
   platformAssetId: string | undefined
+  productId: string | undefined
+  spendLimit: number | null
 }
 
 const open = defineModel<boolean>('open', { default: false })
@@ -20,22 +23,27 @@ const emit = defineEmits<{
 }>()
 
 const toast = useToast()
+const { member } = useCurrentUser()
 const saving = ref(false)
 const rows = ref<DeliveryRow[]>([])
 const assets = ref<PlatformAsset[]>([])
+const productOptions = ref<{ label: string; value: string }[]>([])
+const defaultProductId = ref<string | undefined>()
 
 const remaining = computed(() => {
   if (!props.order) return 0
   return Math.max(0, props.order.requestedQuantity - props.order.deliveredQuantity)
 })
 
-const assetOptions = computed(() => [
-  { label: '（不绑定）', value: '' },
-  ...assets.value.map(item => ({
+/** No empty-string option: Reka/USelectMenu treats "" as "no value" and blocks opening. */
+const assetOptions = computed(() =>
+  assets.value.map(item => ({
     label: `${item.name ?? item.externalId} (${item.externalId})`,
     value: item.id
   }))
-])
+)
+
+const timezoneOptions = DEMAND_TIMEZONE_OPTIONS
 
 const overflowCount = computed(() => Math.max(0, rows.value.length - remaining.value))
 
@@ -48,8 +56,10 @@ function emptyRow(): DeliveryRow {
   return {
     externalAccountId: '',
     name: '',
-    timezone: props.order?.timezone ?? '',
-    platformAssetId: undefined
+    timezone: props.order?.timezone ?? undefined,
+    platformAssetId: undefined,
+    productId: defaultProductId.value,
+    spendLimit: null
   }
 }
 
@@ -64,12 +74,31 @@ async function loadAssets() {
   })
 }
 
+async function loadProducts() {
+  const products = await productService.getProducts()
+  productOptions.value = products.map(item => ({
+    label: `${item.name} · ${item.ownershipType === 'EXTERNAL' ? '外接' : '自家'}`,
+    value: item.id
+  }))
+  defaultProductId.value = undefined
+  if (!props.order?.relatedDemandItemId) return
+  const page = await demandService.getDemands({ page: 1, pageSize: 200 })
+  for (const d of page.data) {
+    const items = await demandService.getDemandItems(d.id)
+    const hit = items.find(item => item.id === props.order!.relatedDemandItemId)
+    if (hit?.productId) {
+      defaultProductId.value = hit.productId
+      break
+    }
+  }
+}
+
 watch(
   () => [open.value, props.order?.id] as const,
   async ([isOpen]) => {
     if (!isOpen || !props.order) return
+    await Promise.all([loadAssets(), loadProducts()])
     rows.value = [emptyRow()]
-    await loadAssets()
   }
 )
 
@@ -88,11 +117,14 @@ async function submit() {
   try {
     const result = await demandService.confirmChannelAccountDelivery({
       orderId: props.order.id,
+      actorMemberId: member.value?.id ?? null,
       accounts: rows.value.map(row => ({
         externalAccountId: row.externalAccountId.trim(),
         name: row.name.trim() || null,
-        timezone: row.timezone.trim() || null,
-        platformAssetId: row.platformAssetId || null
+        timezone: row.timezone?.trim() || null,
+        platformAssetId: row.platformAssetId || null,
+        productId: row.productId || null,
+        spendLimit: row.spendLimit != null && row.spendLimit > 0 ? row.spendLimit : null
       }))
     })
     open.value = false
@@ -128,6 +160,9 @@ async function submit() {
               <p v-if="order" class="text-xs text-muted">
                 {{ order.orderNo }} · 本单还可计入 {{ remaining }} 户。超出部分仍以 AVAILABLE 入池，不计入本 Demand。
               </p>
+              <p v-if="member" class="text-[11px] text-muted mt-0.5">
+                户管将记为操作人：{{ member.name }}
+              </p>
             </div>
           </div>
         </template>
@@ -162,7 +197,35 @@ async function submit() {
               <UInput v-model="row.name" placeholder="可选名称" />
             </UFormField>
             <UFormField label="Timezone">
-              <UInput v-model="row.timezone" placeholder="默认用订单时区" />
+              <USelectMenu
+                v-model="row.timezone"
+                :items="timezoneOptions"
+                value-key="value"
+                label-key="label"
+                placeholder="默认用订单时区"
+                :clear="true"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField label="Product" description="默认来自 Demand，可改">
+              <USelectMenu
+                v-model="row.productId"
+                :items="productOptions"
+                value-key="value"
+                label-key="label"
+                placeholder="选择产品"
+                :clear="true"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField label="Spend Limit" description="账户最高额度，空=不限（仍受渠道共享池约束）">
+              <UInput
+                v-model.number="row.spendLimit"
+                type="number"
+                :min="0"
+                step="100"
+                placeholder="可选"
+              />
             </UFormField>
             <UFormField label="Platform Asset">
               <USelectMenu
@@ -171,7 +234,12 @@ async function submit() {
                 value-key="value"
                 label-key="label"
                 placeholder="可选绑定"
+                :clear="true"
+                class="w-full"
               />
+              <p v-if="!assetOptions.length" class="mt-1 text-xs text-muted">
+                当前渠道 + 媒体下暂无 Platform Asset，可在设置中创建后绑定。
+              </p>
             </UFormField>
           </div>
 

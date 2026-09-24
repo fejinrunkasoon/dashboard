@@ -33,6 +33,14 @@ import {
   parseDate
 } from '../../utils/spend-aggregation'
 import { channelSettlementService } from '../settlement/mock'
+import { alertService } from '../alerts/mock'
+import { buildChannelOwnershipFundSummaries } from './fund-pool'
+import {
+  getBalanceThreshold as readBalanceThreshold,
+  updateBalanceThreshold as writeBalanceThreshold
+} from './balance-threshold'
+import type { Channel } from '../../domain/channel'
+import type { EntityStatus } from '../../domain/common'
 import type {
   ChannelDetailBundle,
   ChannelListItem,
@@ -40,6 +48,7 @@ import type {
   ChannelMetrics,
   ChannelService,
   ConfirmReconciliationInput,
+  CreateChannelInput,
   CreatePrepaymentInput,
   CreateReconciliationInput,
   CreateRefundInput,
@@ -48,9 +57,24 @@ import type {
   ReviewPaymentAddressInput,
   ReviewRefundInput,
   SubmitPaymentAddressInput,
+  UpdateChannelInput,
   UpdatePaymentAddressInput,
   UpdateServiceFeePolicyInput
 } from './types'
+
+function normalizeChannelCode(code: string): string {
+  return code.trim().toUpperCase().replace(/\s+/g, '_')
+}
+
+function assertEntityStatus(status: EntityStatus) {
+  if (status !== 'ACTIVE' && status !== 'DISABLED' && status !== 'ARCHIVED') {
+    throw new Error(`Invalid status: ${status}`)
+  }
+}
+
+function nowIso() {
+  return new Date().toISOString()
+}
 
 function named(id: string, code: string | undefined, name: string): NamedRef {
   return { id, code, name }
@@ -278,6 +302,84 @@ export const channelService: ChannelService = {
             || (media.code?.toLowerCase().includes(keyword) ?? false)
           )
       })
+  },
+
+  async createChannel(input: CreateChannelInput): Promise<Channel> {
+    const code = normalizeChannelCode(input.code)
+    const name = input.name?.trim()
+    if (!code) throw new Error('code is required')
+    if (!name) throw new Error('name is required')
+    if (channels.some(item => item.code === code)) {
+      throw new Error(`Channel code already exists: ${code}`)
+    }
+
+    const supportedMediaIds = [...new Set(input.supportedMediaIds ?? [])]
+    for (const mediaId of supportedMediaIds) {
+      if (!mediaPlatforms.some(item => item.id === mediaId)) {
+        throw new Error(`Unknown media: ${mediaId}`)
+      }
+    }
+
+    const stamp = nowIso()
+    let id = `ch-${code.toLowerCase().replace(/_/g, '-')}`
+    if (channels.some(item => item.id === id)) {
+      id = `ch-${code.toLowerCase()}-${channels.length + 1}`
+    }
+
+    const channel: Channel = {
+      id,
+      code,
+      name,
+      status: 'ACTIVE',
+      supportedMediaIds,
+      contactName: input.contactName?.trim() || null,
+      telegramReference: input.telegramReference?.trim() || null,
+      note: input.note?.trim() || null,
+      createdAt: stamp,
+      updatedAt: stamp
+    }
+    channels.push(channel)
+    return channel
+  },
+
+  async updateChannel(id: string, input: UpdateChannelInput): Promise<Channel> {
+    const channel = channels.find(item => item.id === id)
+    if (!channel) throw new Error(`Unknown channel: ${id}`)
+
+    if (input.name !== undefined) {
+      const name = input.name.trim()
+      if (!name) throw new Error('name is required')
+      channel.name = name
+    }
+    if (input.supportedMediaIds !== undefined) {
+      const supportedMediaIds = [...new Set(input.supportedMediaIds)]
+      for (const mediaId of supportedMediaIds) {
+        if (!mediaPlatforms.some(item => item.id === mediaId)) {
+          throw new Error(`Unknown media: ${mediaId}`)
+        }
+      }
+      channel.supportedMediaIds = supportedMediaIds
+    }
+    if (input.contactName !== undefined) {
+      channel.contactName = input.contactName?.trim() || null
+    }
+    if (input.telegramReference !== undefined) {
+      channel.telegramReference = input.telegramReference?.trim() || null
+    }
+    if (input.note !== undefined) {
+      channel.note = input.note?.trim() || null
+    }
+    channel.updatedAt = nowIso()
+    return channel
+  },
+
+  async setChannelStatus(id: string, status: EntityStatus): Promise<Channel> {
+    assertEntityStatus(status)
+    const channel = channels.find(item => item.id === id)
+    if (!channel) throw new Error(`Unknown channel: ${id}`)
+    channel.status = status
+    channel.updatedAt = nowIso()
+    return channel
   },
 
   async getChannelDetail(id: string): Promise<ChannelDetailBundle | null> {
@@ -629,5 +731,32 @@ export const channelService: ChannelService = {
     if (input.note?.trim()) row.note = input.note.trim()
     row.updatedAt = ts
     return { ...row }
+  },
+
+  async getOwnershipFundSummaries(channelId: string) {
+    if (!channelId) throw new Error('channelId is required')
+    const threshold = readBalanceThreshold(channelId)
+    const summaries = buildChannelOwnershipFundSummaries(
+      channelId,
+      threshold.runwayLookbackDays
+    )
+    await alertService.ensureChannelBalanceAlerts(channelId, summaries, threshold)
+    return summaries
+  },
+
+  async getBalanceThreshold(channelId: string) {
+    if (!channelId) throw new Error('channelId is required')
+    return readBalanceThreshold(channelId)
+  },
+
+  async updateBalanceThreshold(channelId, patch) {
+    if (!channelId) throw new Error('channelId is required')
+    const next = writeBalanceThreshold(channelId, patch)
+    const summaries = buildChannelOwnershipFundSummaries(
+      channelId,
+      next.runwayLookbackDays
+    )
+    await alertService.ensureChannelBalanceAlerts(channelId, summaries, next)
+    return next
   }
 }

@@ -15,6 +15,10 @@ const items = [{
   icon: 'i-lucide-layers',
   to: '/accounts/pool'
 }, {
+  label: '平台连接',
+  icon: 'i-lucide-link',
+  to: '/accounts/connections'
+}, {
   label: '需求调度',
   icon: 'i-lucide-git-compare',
   to: '/accounts/scheduling'
@@ -23,7 +27,7 @@ const items = [{
   icon: 'i-lucide-boxes',
   to: '/accounts/assets'
 }, {
-  label: '数据导入',
+  label: '文件导入',
   icon: 'i-lucide-file-up',
   to: '/accounts/import'
 }, {

@@ -1,6 +1,7 @@
 import { paginate } from '../../domain/common'
 import type { EntityStatus } from '../../domain/common'
-import type { MediaPlatform, PlatformAssetType } from '../../domain/media'
+import type { MediaPlatform, PlatformAsset, PlatformAssetType } from '../../domain/media'
+import { isAllowedAssetTypeCode, isPresetMediaCode } from '../../domain/media-presets'
 import {
   channels,
   mediaPlatforms,
@@ -10,12 +11,14 @@ import {
 } from '../../mocks'
 import type {
   CreateMediaPlatformInput,
+  CreatePlatformAssetInput,
   CreatePlatformAssetTypeInput,
   MediaMasterQuery,
   MediaService,
   PlatformAssetListItem,
   PlatformAssetQuery,
   UpdateMediaPlatformInput,
+  UpdatePlatformAssetInput,
   UpdatePlatformAssetTypeInput
 } from './types'
 
@@ -187,6 +190,11 @@ export const mediaService: MediaService = {
     const name = input.name?.trim()
     if (!code) throw new Error('code is required')
     if (!name) throw new Error('name is required')
+    if (!isPresetMediaCode(code)) {
+      throw new Error(
+        `仅支持预置媒体 API（META/GOOGLE/TIKTOK/SNAPCHAT）。新媒体需后端实现 adapter，不能在字典发明。`
+      )
+    }
     if (mediaPlatforms.some(item => item.code === code)) {
       throw new Error(`Media platform code already exists: ${code}`)
     }
@@ -241,6 +249,11 @@ export const mediaService: MediaService = {
 
     const media = mediaPlatforms.find(item => item.id === input.mediaId)
     if (!media) throw new Error(`Unknown media platform: ${input.mediaId}`)
+    if (!isAllowedAssetTypeCode(media.code, code)) {
+      throw new Error(
+        `Asset Type ${code} 不在 ${media.code} 白名单内（见官方 BM/MCC/BC/Org）。禁止跨媒体错挂或发明类型。`
+      )
+    }
 
     if (platformAssetTypes.some(item => item.mediaId === input.mediaId && item.code === code)) {
       throw new Error(`Asset type code already exists for this media: ${code}`)
@@ -282,5 +295,91 @@ export const mediaService: MediaService = {
     if (type.status === status) return { ...type }
     type.status = status
     return { ...type }
+  },
+
+  async createPlatformAsset(input: CreatePlatformAssetInput): Promise<PlatformAsset> {
+    const externalId = input.externalId?.trim()
+    if (!input.mediaId) throw new Error('mediaId is required')
+    if (!input.typeId) throw new Error('typeId is required')
+    if (!externalId) throw new Error('externalId is required')
+
+    const media = mediaPlatforms.find(item => item.id === input.mediaId)
+    if (!media) throw new Error(`Unknown media platform: ${input.mediaId}`)
+
+    const type = platformAssetTypes.find(item => item.id === input.typeId)
+    if (!type) throw new Error(`Unknown platform asset type: ${input.typeId}`)
+    if (type.mediaId !== input.mediaId) {
+      throw new Error('typeId does not belong to the selected media')
+    }
+
+    if (input.sourceChannelId) {
+      const channel = channels.find(item => item.id === input.sourceChannelId)
+      if (!channel) throw new Error(`Unknown channel: ${input.sourceChannelId}`)
+    }
+
+    if (platformAssets.some(
+      item =>
+        item.mediaId === input.mediaId
+        && item.typeId === input.typeId
+        && item.externalId === externalId
+    )) {
+      throw new Error(`Platform asset already exists: ${media.code}/${type.code}/${externalId}`)
+    }
+
+    const stamp = new Date().toISOString()
+    let id = `pa-${media.code.toLowerCase()}-${externalId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24) || 'asset'}`
+    if (platformAssets.some(item => item.id === id)) {
+      id = `${id}-${platformAssets.length + 1}`
+    }
+
+    const asset: PlatformAsset = {
+      id,
+      mediaId: input.mediaId,
+      typeId: input.typeId,
+      externalId,
+      name: input.name?.trim() || null,
+      sourceChannelId: input.sourceChannelId || null,
+      status: 'ACTIVE',
+      note: input.note?.trim() || null,
+      createdAt: stamp,
+      updatedAt: stamp
+    }
+    platformAssets.push(asset)
+    return { ...asset }
+  },
+
+  async updatePlatformAsset(id: string, input: UpdatePlatformAssetInput): Promise<PlatformAsset> {
+    const asset = platformAssets.find(item => item.id === id)
+    if (!asset) throw new Error(`Unknown platform asset: ${id}`)
+
+    if (input.name !== undefined) {
+      asset.name = input.name?.trim() || null
+    }
+    if (input.sourceChannelId !== undefined) {
+      if (input.sourceChannelId) {
+        const channel = channels.find(item => item.id === input.sourceChannelId)
+        if (!channel) throw new Error(`Unknown channel: ${input.sourceChannelId}`)
+      }
+      asset.sourceChannelId = input.sourceChannelId || null
+    }
+    if (input.note !== undefined) {
+      asset.note = input.note?.trim() || null
+    }
+    asset.updatedAt = new Date().toISOString()
+    return { ...asset }
+  },
+
+  async setPlatformAssetStatus(
+    id: string,
+    status: 'ACTIVE' | 'DISABLED' | 'ARCHIVED'
+  ): Promise<PlatformAsset> {
+    if (status !== 'ACTIVE' && status !== 'DISABLED' && status !== 'ARCHIVED') {
+      throw new Error(`Invalid status: ${status}`)
+    }
+    const asset = platformAssets.find(item => item.id === id)
+    if (!asset) throw new Error(`Unknown platform asset: ${id}`)
+    asset.status = status
+    asset.updatedAt = new Date().toISOString()
+    return { ...asset }
   }
 }

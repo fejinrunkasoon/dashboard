@@ -17,15 +17,12 @@ const periodLabels: Record<Period, string> = {
 }
 
 const periods = computed<Period[]>(() => {
+  // Short windows: only daily is meaningful.
   if (days.value.length <= 8) {
     return ['daily']
   }
 
-  if (days.value.length <= 31) {
-    return ['daily', 'weekly']
-  }
-
-  return ['weekly', 'monthly']
+  return ['daily', 'weekly', 'monthly']
 })
 
 watch(periods, () => {

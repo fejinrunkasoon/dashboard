@@ -15,8 +15,15 @@ export interface DictionaryEnumItem {
   status: EntityStatus
 }
 
+export interface CreateEnumItemInput {
+  kind: DictionaryEnumKind
+  code: string
+  label: string
+}
+
 export interface DictionaryService {
   getEnumItems(kind?: DictionaryEnumKind): Promise<DictionaryEnumItem[]>
+  createEnumItem(input: CreateEnumItemInput): Promise<DictionaryEnumItem>
   setEnumStatus(id: string, status: EntityStatus): Promise<DictionaryEnumItem>
 }
 

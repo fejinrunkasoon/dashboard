@@ -26,6 +26,7 @@ useSeoMeta({ title: '全部账户' })
 const toast = useToast()
 const route = useRoute()
 const router = useRouter()
+const { userId: currentViewerUserId } = useCurrentUser()
 
 const { query, activeChips, setFilters, clearFilters, removeFilter } = useAccountFilters({
   page: 1,
@@ -206,7 +207,7 @@ async function resetAdvanced() {
 }
 
 function buildListQuery(): AccountQuery {
-  const base = { ...query.value }
+  const base = { ...query.value, viewerUserId: currentViewerUserId.value }
   if (spendPeriod.value === 'CUSTOM' && base.spendRange) return base
   const { spendRange: _omit, ...rest } = base
   return rest
@@ -242,7 +243,7 @@ async function loadAccounts() {
 }
 
 watch(
-  () => [route.query, spendPeriod.value] as const,
+  () => [route.query, spendPeriod.value, currentViewerUserId.value] as const,
   () => { void loadAccounts() },
   { immediate: true, deep: true }
 )
@@ -942,6 +943,9 @@ const columns: TableColumn<AdAccountListItem>[] = [{
   id: 'remainingLimit',
   header: '剩余额度'
 }, {
+  id: 'effectiveRemaining',
+  header: '有效可消耗'
+}, {
   id: 'periodSpend',
   header: () => periodSpendHeader.value
 }, {
@@ -979,6 +983,7 @@ const exportColumns = [
   { key: 'mediaStatus', header: '媒体状态' },
   { key: 'spendLimit', header: 'Spend Limit' },
   { key: 'amountSpent', header: '已花费' },
+  { key: 'effectiveRemaining', header: '有效可消耗' },
   { key: 'spend7d', header: '7D Spend' },
   { key: 'note', header: '备注' }
 ]
@@ -1003,6 +1008,7 @@ async function getExportRows() {
     mediaStatus: item.mediaStatus,
     spendLimit: item.spendLimit ?? '',
     amountSpent: item.amountSpent,
+    effectiveRemaining: item.effectiveRemaining ?? '',
     spend7d: item.spend7d,
     note: item.note ?? ''
   }))
@@ -1035,6 +1041,13 @@ async function getExportRows() {
 
     <template #body>
     <div class="p-4 space-y-4">
+      <UAlert
+        color="info"
+        variant="subtle"
+        icon="i-lucide-shield"
+        title="按当前用户权限过滤"
+        description="列表经 AccountAccessService 过滤。左下角可切换 Mock 身份：李四仅见被分配账户；王五（Org Admin）可见全部。"
+      />
       <div class="flex flex-wrap items-center gap-3">
         <FiltersQuickFilter v-model="quickMedia" label="媒体" :options="mediaFilterOptions" />
         <FiltersQuickFilter v-model="quickAssetStatus" label="状态" :options="assetStatusQuickOptions" />
@@ -1261,6 +1274,9 @@ async function getExportRows() {
 
           <template #remainingLimit-cell="{ row }">
             <span class="font-mono text-xs">{{ moneyOrDash(cellAccount(row).remainingLimit) }}</span>
+          </template>
+          <template #effectiveRemaining-cell="{ row }">
+            <span class="font-mono text-xs">{{ moneyOrDash(cellAccount(row).effectiveRemaining) }}</span>
           </template>
 
           <template #periodSpend-cell="{ row }">

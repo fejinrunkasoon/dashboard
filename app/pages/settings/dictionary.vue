@@ -1,16 +1,22 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
-import type { MediaPlatform, PlatformAssetType } from '~/domain'
-import type { DictionaryEnumItem, DictionaryEnumKind } from '~/services'
-import { DICTIONARY_KIND_LABELS, dictionaryService } from '~/services'
+import type { Channel, MediaPlatform, PlatformAsset, PlatformAssetType } from '~/domain'
+import type { DictionaryEnumItem, DictionaryEnumKind, PlatformAssetListItem } from '~/services'
+import {
+  DICTIONARY_KIND_LABELS,
+  channelService,
+  dictionaryService,
+  mediaService
+} from '~/services'
 
 useSeoMeta({ title: '数据字典' })
 
 const toast = useToast()
 
-const pageSegment = ref<'media' | 'enums'>('media')
+const pageSegment = ref<'media' | 'assets' | 'enums'>('media')
 const pageSegmentItems = [
   { label: '媒体主数据', value: 'media' },
+  { label: '资产实例', value: 'assets' },
   { label: '业务枚举', value: 'enums' }
 ]
 
@@ -43,6 +49,15 @@ const saving = ref(false)
 const enumItems = ref<DictionaryEnumItem[]>([])
 const selectedKind = ref<DictionaryEnumKind>('TRANSFER_REASON')
 const enumPending = ref(true)
+const showEnumModal = ref(false)
+
+const assetRows = ref<PlatformAssetListItem[]>([])
+const assetEntities = ref<PlatformAsset[]>([])
+const allTypes = ref<PlatformAssetType[]>([])
+const channels = ref<Channel[]>([])
+const assetPending = ref(true)
+const showAssetModal = ref(false)
+const editingAsset = ref<PlatformAsset | null>(null)
 
 const kindItems = (Object.keys(DICTIONARY_KIND_LABELS) as DictionaryEnumKind[]).map(kind => ({
   label: DICTIONARY_KIND_LABELS[kind],
@@ -56,6 +71,16 @@ const enumColumns: TableColumn<DictionaryEnumItem>[] = [
   { id: 'actions', header: '操作' }
 ]
 
+const assetColumns: TableColumn<PlatformAssetListItem>[] = [
+  { accessorKey: 'mediaName', header: '媒体' },
+  { accessorKey: 'typeName', header: '类型' },
+  { accessorKey: 'externalId', header: 'External ID' },
+  { accessorKey: 'name', header: '名称' },
+  { accessorKey: 'channelName', header: '来源渠道' },
+  { accessorKey: 'status', header: '状态' },
+  { id: 'actions', header: '操作' }
+]
+
 async function refreshEnums() {
   enumPending.value = true
   try {
@@ -65,10 +90,34 @@ async function refreshEnums() {
   }
 }
 
+async function refreshAssets() {
+  assetPending.value = true
+  try {
+    const [list, entities, types, channelRows] = await Promise.all([
+      mediaService.getPlatformAssetList({ page: 1, pageSize: 500 }),
+      mediaService.getPlatformAssets(),
+      mediaService.getPlatformAssetTypes(),
+      channelService.getChannels()
+    ])
+    assetRows.value = list.data
+    assetEntities.value = entities
+    allTypes.value = types
+    channels.value = channelRows
+  } finally {
+    assetPending.value = false
+  }
+}
+
 await refreshEnums()
+await refreshAssets()
 
 watch(selectedKind, () => {
   refreshEnums()
+})
+
+watch(pageSegment, (segment) => {
+  if (segment === 'assets') void refreshAssets()
+  if (segment === 'enums') void refreshEnums()
 })
 
 function openCreatePlatform() {
@@ -89,6 +138,20 @@ function openCreateType() {
 function openEditType(type: PlatformAssetType) {
   editingType.value = type
   showTypeModal.value = true
+}
+
+function openCreateAsset() {
+  editingAsset.value = null
+  showAssetModal.value = true
+}
+
+function openEditAsset(row: PlatformAssetListItem) {
+  editingAsset.value = assetEntities.value.find(item => item.id === row.id) ?? null
+  showAssetModal.value = true
+}
+
+function openCreateEnum() {
+  showEnumModal.value = true
 }
 
 async function onSavePlatform(payload: { code: string, name: string, logoUrl?: string | null }) {
@@ -190,6 +253,84 @@ async function onToggleTypeStatus(type: PlatformAssetType) {
   }
 }
 
+async function onSaveAsset(payload: {
+  mediaId: string
+  typeId: string
+  externalId: string
+  name?: string | null
+  sourceChannelId?: string | null
+  note?: string | null
+}) {
+  if (saving.value) return
+  saving.value = true
+  try {
+    if (editingAsset.value) {
+      await mediaService.updatePlatformAsset(editingAsset.value.id, {
+        name: payload.name,
+        sourceChannelId: payload.sourceChannelId,
+        note: payload.note
+      })
+      toast.add({ title: '已更新媒体资产', icon: 'i-lucide-check', color: 'success' })
+    } else {
+      await mediaService.createPlatformAsset(payload)
+      toast.add({ title: '已登记媒体资产', icon: 'i-lucide-check', color: 'success' })
+    }
+    showAssetModal.value = false
+    await refreshAssets()
+  } catch (error) {
+    toast.add({
+      title: '保存失败',
+      description: error instanceof Error ? error.message : '未知错误',
+      icon: 'i-lucide-alert-circle',
+      color: 'error'
+    })
+  } finally {
+    saving.value = false
+  }
+}
+
+async function onToggleAssetStatus(row: PlatformAssetListItem) {
+  const next = row.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE'
+  try {
+    await mediaService.setPlatformAssetStatus(row.id, next)
+    toast.add({
+      title: next === 'ACTIVE' ? '已启用资产' : '已停用资产',
+      description: `${row.externalId} → ${next}`,
+      icon: 'i-lucide-check',
+      color: 'success'
+    })
+    await refreshAssets()
+  } catch (error) {
+    toast.add({
+      title: '状态更新失败',
+      description: error instanceof Error ? error.message : '未知错误',
+      icon: 'i-lucide-alert-circle',
+      color: 'error'
+    })
+  }
+}
+
+async function onSaveEnum(payload: { kind: DictionaryEnumKind, code: string, label: string }) {
+  if (saving.value) return
+  saving.value = true
+  try {
+    await dictionaryService.createEnumItem(payload)
+    toast.add({ title: '已创建枚举项', icon: 'i-lucide-check', color: 'success' })
+    showEnumModal.value = false
+    selectedKind.value = payload.kind
+    await refreshEnums()
+  } catch (error) {
+    toast.add({
+      title: '保存失败',
+      description: error instanceof Error ? error.message : '未知错误',
+      icon: 'i-lucide-alert-circle',
+      color: 'error'
+    })
+  } finally {
+    saving.value = false
+  }
+}
+
 async function onToggleEnumStatus(item: DictionaryEnumItem) {
   const next = item.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE'
   try {
@@ -220,7 +361,7 @@ function statusColor(status: string) {
   <div class="space-y-8">
     <UPageCard
       title="数据字典"
-      description="媒体主数据（STEP 19）与普通业务枚举。费率策略、产品、团队不在本页维护。"
+      description="媒体主数据、资产实例与业务枚举。费率策略、产品、团队、渠道不在本页维护。"
       variant="naked"
       orientation="horizontal"
       class="mb-2"
@@ -229,6 +370,15 @@ function statusColor(status: string) {
     <UTabs v-model="pageSegment" :items="pageSegmentItems" class="w-full" :content="false" />
 
     <template v-if="pageSegment === 'media'">
+      <UAlert
+        color="info"
+        variant="subtle"
+        icon="i-lucide-info"
+        title="媒体主数据（预置）"
+        description="META/GOOGLE/TIKTOK/SNAPCHAT 为预置媒体；Asset Type 受白名单约束（BM/MCC/BC/Org）。禁止发明新媒体 API 或跨媒体错挂类型。开通 App 凭据请到「媒体平台开通」。"
+        class="mb-2"
+      />
+
       <UAlert
         v-if="errorMessage"
         color="error"
@@ -276,20 +426,117 @@ function statusColor(status: string) {
       />
     </template>
 
+    <template v-else-if="pageSegment === 'assets'">
+      <div class="space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+          <div>
+            <h3 class="text-sm font-semibold text-highlighted">资产实例</h3>
+            <p class="text-xs text-muted">
+              登记 BM / MCC / BC / Org 等平台侧容器。运营筛选请到账户中心 → 媒体资产。
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <UButton
+              label="去媒体资产"
+              icon="i-lucide-boxes"
+              color="neutral"
+              variant="outline"
+              size="sm"
+              to="/accounts/assets"
+            />
+            <UButton
+              label="登记资产"
+              icon="i-lucide-plus"
+              color="neutral"
+              size="sm"
+              @click="openCreateAsset"
+            />
+          </div>
+        </div>
+
+        <div v-if="assetPending" class="rounded-lg border border-default p-6 text-sm text-muted">
+          加载中…
+        </div>
+        <div
+          v-else-if="!assetRows.length"
+          class="rounded-lg border border-dashed border-default p-6 text-sm text-muted"
+        >
+          暂无资产实例。点击「登记资产」创建。
+        </div>
+        <div v-else class="overflow-x-auto rounded-lg border border-default">
+          <UTable :data="assetRows" :columns="assetColumns" class="shrink-0">
+            <template #externalId-cell="{ row }">
+              <span class="font-mono text-xs text-muted">{{ row.original.externalId }}</span>
+            </template>
+            <template #name-cell="{ row }">
+              <span class="text-sm">{{ row.original.name ?? '—' }}</span>
+            </template>
+            <template #channelName-cell="{ row }">
+              <span class="text-sm text-muted">{{ row.original.channelName ?? '—' }}</span>
+            </template>
+            <template #status-cell="{ row }">
+              <UBadge
+                :label="row.original.status"
+                :color="statusColor(row.original.status)"
+                variant="subtle"
+                size="xs"
+              />
+            </template>
+            <template #actions-cell="{ row }">
+              <div class="flex items-center gap-1">
+                <UButton
+                  label="编辑"
+                  size="xs"
+                  color="neutral"
+                  variant="ghost"
+                  @click="openEditAsset(row.original)"
+                />
+                <UButton
+                  :label="row.original.status === 'ACTIVE' ? '停用' : '启用'"
+                  size="xs"
+                  :color="row.original.status === 'ACTIVE' ? 'warning' : 'success'"
+                  variant="ghost"
+                  @click="onToggleAssetStatus(row.original)"
+                />
+              </div>
+            </template>
+          </UTable>
+        </div>
+      </div>
+
+      <SettingsPlatformAssetFormModal
+        v-model:open="showAssetModal"
+        :asset="editingAsset"
+        :media-platforms="platforms"
+        :asset-types="allTypes"
+        :channels="channels"
+        @save="onSaveAsset"
+      />
+    </template>
+
     <template v-else>
       <div class="space-y-4">
         <div class="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
           <div>
             <h3 class="text-sm font-semibold text-highlighted">业务枚举</h3>
             <p class="text-xs text-muted">
-              Transfer / Recycle / Disable Reason、Priority、Tags。仅启停，不做复杂 CRUD。
+              Transfer / Recycle / Disable Reason、Priority、Tags。可新增与启停。
             </p>
           </div>
-          <USelect
-            v-model="selectedKind"
-            :items="kindItems"
-            class="w-full sm:w-48"
-          />
+          <div class="flex flex-wrap gap-2 items-center">
+            <USelect
+              v-model="selectedKind"
+              :items="kindItems"
+              class="w-full sm:w-48"
+            />
+            <UButton
+              label="新增"
+              icon="i-lucide-plus"
+              color="neutral"
+              size="sm"
+              @click="openCreateEnum"
+            />
+          </div>
         </div>
 
         <div v-if="enumPending" class="rounded-lg border border-default p-6 text-sm text-muted">
@@ -299,7 +546,7 @@ function statusColor(status: string) {
           v-else-if="!enumItems.length"
           class="rounded-lg border border-dashed border-default p-6 text-sm text-muted"
         >
-          该分类暂无枚举项。
+          该分类暂无枚举项。点击「新增」创建。
         </div>
         <div v-else class="overflow-x-auto rounded-lg border border-default">
           <UTable :data="enumItems" :columns="enumColumns" class="shrink-0">
@@ -326,6 +573,12 @@ function statusColor(status: string) {
           </UTable>
         </div>
       </div>
+
+      <SettingsEnumFormModal
+        v-model:open="showEnumModal"
+        :kind="selectedKind"
+        @save="onSaveEnum"
+      />
     </template>
   </div>
 </template>

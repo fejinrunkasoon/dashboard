@@ -12,6 +12,16 @@ export default defineNuxtConfig({
 
   css: ['~/assets/css/main.css'],
 
+  runtimeConfig: {
+    /** Server-only: encrypt OAuth tokens / app secrets at rest. */
+    tokenEncryptionKey: process.env.TOKEN_ENCRYPTION_KEY || 'dev-only-change-me-32chars!!',
+    databaseUrl: process.env.DATABASE_URL || '',
+    public: {
+      /** mock | live — when live, frontend uses /api media endpoints. */
+      mediaApi: process.env.NUXT_PUBLIC_MEDIA_API || 'mock'
+    }
+  },
+
   routeRules: {
     '/api/**': {
       cors: true

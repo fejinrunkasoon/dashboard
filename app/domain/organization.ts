@@ -4,6 +4,7 @@ export interface Team {
   id: string
   code: string
   name: string
+  organizationId?: string | null
   leaderMemberId?: string | null
   status: EntityStatus
 }

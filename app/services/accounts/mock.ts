@@ -36,6 +36,7 @@ import {
   parseDate,
   shiftDate
 } from '../../utils/spend-aggregation'
+import { getPoolRemainingMap } from '../channels/fund-pool'
 import type {
   AccountService,
   AssignDirectInput,
@@ -46,6 +47,8 @@ import type {
   ChangeManagerResult,
   ChangeProductInput,
   ChangeProductResult,
+  ChangeSpendLimitInput,
+  ChangeSpendLimitResult,
   DisableAccountInput,
   DisableAccountResult,
   RecycleAccountInput,
@@ -54,6 +57,7 @@ import type {
   TransferAccountResult
 } from './types'
 import { isInAccountPool } from './pool-eligibility'
+import { getAccessibleAccountIdsSync } from '../access/mock'
 
 function assertNotDisabled(accountId: string, accountAssetStatus: string) {
   if (accountAssetStatus === 'DISABLED') {
@@ -115,6 +119,18 @@ function buildListItem(accountId: string): AdAccountListItem | null {
   const spendRows = accountSpendDaily.filter(row => row.accountId === account.id)
   const metrics = aggregateSpendMetrics(account.id, account.spendLimit, spendRows)
 
+  const ownership = product?.ownershipType ?? null
+  const poolMap = account.sourceChannelId
+    ? getPoolRemainingMap(account.sourceChannelId)
+    : null
+  const poolRemaining = ownership && poolMap ? poolMap[ownership] : null
+  let effectiveRemaining: number | null = null
+  if (poolRemaining != null || metrics.remainingLimit != null) {
+    if (poolRemaining == null) effectiveRemaining = metrics.remainingLimit ?? null
+    else if (metrics.remainingLimit == null) effectiveRemaining = poolRemaining
+    else effectiveRemaining = Math.min(metrics.remainingLimit, poolRemaining)
+  }
+
   return {
     id: account.id,
     externalAccountId: account.externalAccountId,
@@ -148,6 +164,8 @@ function buildListItem(accountId: string): AdAccountListItem | null {
     spendLimit: account.spendLimit ?? null,
     amountSpent: metrics.amountSpent,
     remainingLimit: metrics.remainingLimit ?? null,
+    poolRemaining,
+    effectiveRemaining,
     todaySpend: metrics.todaySpend,
     spend7d: metrics.spend7d,
     spend30d: metrics.spend30d,
@@ -173,6 +191,11 @@ function matchesLastSpendPreset(lastSpendAt: string | null, preset: LastSpendPre
 
 function applyQuery(items: AdAccountListItem[], query: AccountQuery): AdAccountListItem[] {
   let rows = [...items]
+
+  if (query.viewerUserId) {
+    const allowed = new Set(getAccessibleAccountIdsSync(query.viewerUserId))
+    rows = rows.filter(item => allowed.has(item.id))
+  }
 
   if (query.keyword?.trim()) {
     const q = query.keyword.trim().toLowerCase()
@@ -876,5 +899,22 @@ export const accountService: AccountService = {
     account.updatedAt = ts
 
     return { feePolicyAssignmentId }
+  },
+
+  async changeSpendLimit(input: ChangeSpendLimitInput): Promise<ChangeSpendLimitResult> {
+    if (!input.accountId) throw new Error('accountId is required')
+    if (!input.createdBy) throw new Error('createdBy is required')
+
+    const account = accounts.find(item => item.id === input.accountId)
+    if (!account) throw new Error(`Unknown account: ${input.accountId}`)
+    assertNotDisabled(input.accountId, account.assetStatus)
+
+    const spendLimit
+      = input.spendLimit != null && Number.isFinite(input.spendLimit) && input.spendLimit > 0
+        ? input.spendLimit
+        : null
+    account.spendLimit = spendLimit
+    account.updatedAt = writeTimestamp()
+    return { accountId: account.id, spendLimit }
   }
 }

@@ -92,9 +92,11 @@ function onCredentialStatusChange(value: MediaCredentialStatus | MediaCredential
     <div>
       <h3 class="text-sm font-semibold text-highlighted">Credential 与同步范围</h3>
       <p class="text-xs text-muted">
-        Mock Credential，不存 Token。开启「发现账户」后到
-        <NuxtLink to="/settings/sync" class="text-primary underline">媒体同步</NuxtLink>
-        执行发现。真实 OAuth = STEP 30。
+        Mock Credential（TEST ONLY），不存 Token。业务进户请到
+        <NuxtLink to="/accounts/connections" class="text-primary underline">平台连接</NuxtLink>
+        。运维排障可到
+        <NuxtLink to="/settings/sync" class="text-primary underline">数据同步</NuxtLink>
+        。真实 OAuth 接口位预留。
       </p>
     </div>
 
@@ -175,7 +177,7 @@ function onCredentialStatusChange(value: MediaCredentialStatus | MediaCredential
           <UCheckbox v-model="discoverAccounts" label="发现账户" />
           <p class="text-xs text-muted">
             开启后可在
-            <NuxtLink to="/settings/sync" class="text-primary underline">媒体同步</NuxtLink>
+            <NuxtLink to="/accounts/connections" class="text-primary underline">平台连接</NuxtLink>
             运行 Discovery。
           </p>
           <UCheckbox v-model="syncSpend" label="同步消耗" />

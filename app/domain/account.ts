@@ -10,6 +10,8 @@ import type {
 
 export interface AdAccount {
   id: string
+  /** Tenant boundary — uniqueness is (organizationId, mediaId, externalAccountId). */
+  organizationId?: string | null
   externalAccountId: string
   name?: string | null
   mediaId: string
@@ -147,6 +149,11 @@ export interface AccountQuery extends PaginationQuery, SortQuery {
   hasNote?: boolean
   receivedFrom?: string
   receivedTo?: string
+  /**
+   * When set, results are filtered by AccountAccessService for this AppUser id.
+   * Server-side enforcement — do not trust client-only teamId filters.
+   */
+  viewerUserId?: string
 }
 
 export interface NamedRef {
@@ -188,6 +195,10 @@ export interface AdAccountListItem {
   spendLimit: number | null
   amountSpent: number
   remainingLimit: number | null
+  /** Shared pool remaining for this account's product ownership tag on its channel. */
+  poolRemaining: number | null
+  /** min(remainingLimit, poolRemaining); null when both uncapped/unknown. */
+  effectiveRemaining: number | null
   todaySpend: number
   spend7d: number
   spend30d: number

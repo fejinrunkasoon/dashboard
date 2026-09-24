@@ -7,6 +7,8 @@ import type {
   ChannelPrepayment,
   ChannelReconciliation,
   ChannelRefund,
+  ChannelOwnershipFundSummary,
+  ChannelBalanceThreshold,
   ServiceFeePolicy,
   ServiceFeeTier
 } from '../../domain/finance'
@@ -151,11 +153,31 @@ export interface ConfirmReconciliationInput {
   note?: string | null
 }
 
+export interface CreateChannelInput {
+  code: string
+  name: string
+  supportedMediaIds: string[]
+  contactName?: string | null
+  telegramReference?: string | null
+  note?: string | null
+}
+
+export interface UpdateChannelInput {
+  name?: string
+  supportedMediaIds?: string[]
+  contactName?: string | null
+  telegramReference?: string | null
+  note?: string | null
+}
+
 export interface ChannelService {
   getChannels(): Promise<Channel[]>
   getChannelById(id: string): Promise<Channel | null>
   getChannelList(query?: ChannelListQuery): Promise<ChannelListItem[]>
   getChannelDetail(id: string): Promise<ChannelDetailBundle | null>
+  createChannel(input: CreateChannelInput): Promise<Channel>
+  updateChannel(id: string, input: UpdateChannelInput): Promise<Channel>
+  setChannelStatus(id: string, status: EntityStatus): Promise<Channel>
   getPaymentAddresses(channelId: string): Promise<ChannelPaymentAddress[]>
   getPrepayments(channelId?: string): Promise<ChannelPrepayment[]>
   getRefunds(channelId?: string): Promise<ChannelRefund[]>
@@ -176,4 +198,14 @@ export interface ChannelService {
   getReconciliations(channelId: string): Promise<ChannelReconciliation[]>
   createReconciliation(input: CreateReconciliationInput): Promise<ChannelReconciliation>
   confirmReconciliation(id: string, input: ConfirmReconciliationInput): Promise<ChannelReconciliation>
+  /** Shared fund pool by 自家/外接 tag. */
+  getOwnershipFundSummaries(channelId: string): Promise<ChannelOwnershipFundSummary[]>
+  getBalanceThreshold(channelId: string): Promise<ChannelBalanceThreshold>
+  updateBalanceThreshold(
+    channelId: string,
+    patch: Partial<Pick<
+      ChannelBalanceThreshold,
+      'absoluteBalanceBelow' | 'daysOfRunwayBelow' | 'runwayLookbackDays' | 'enabledTags' | 'severity'
+    >>
+  ): Promise<ChannelBalanceThreshold>
 }

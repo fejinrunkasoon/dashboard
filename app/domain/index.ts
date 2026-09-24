@@ -3,6 +3,20 @@ export { paginate } from './common'
 
 export type { MediaPlatform, PlatformAssetType, PlatformAsset } from './media'
 export type {
+  PlatformAppStatus,
+  PlatformApp,
+  PlatformAppUpsertInput,
+  ConnectablePlatform
+} from './platform-app'
+export {
+  PRESET_MEDIA_CODES,
+  ASSET_TYPE_WHITELIST,
+  MEDIA_CODE_TO_IMPL,
+  isPresetMediaCode,
+  isAllowedAssetTypeCode
+} from './media-presets'
+export type { PresetMediaCode } from './media-presets'
+export type {
   MediaConnectorCapability,
   MediaConnectorDefinition,
   MediaConnectorBinding,
@@ -32,6 +46,21 @@ export type {
 export type { Channel } from './channel'
 export type { Customer, Product } from './product'
 export type { Team, Member } from './organization'
+export type { Organization, AppRole, AppUser } from './access'
+export type {
+  MediaConnectionStatus,
+  ProviderAccessStatus,
+  MediaConnection,
+  ConnectionSecret,
+  ConnectionAccount
+} from './connection'
+export type {
+  UserAccountAssignmentType,
+  TeamAccountLinkStatus,
+  TeamAccountLink,
+  UserAccountAccess
+} from './governance'
+export type { AuditAction, AuditLog } from './audit'
 
 export type {
   AdAccount,
@@ -119,6 +148,8 @@ export type {
   ChannelRefundStatus,
   ChannelRefund,
   SettlementQuery,
+  ChannelOwnershipFundSummary,
+  ChannelBalanceThreshold,
   ChannelReconciliationStatus,
   ChannelReconciliation
 } from './finance'

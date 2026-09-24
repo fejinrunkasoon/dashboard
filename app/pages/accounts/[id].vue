@@ -7,15 +7,17 @@ import type {
   AccountServiceFeePolicyAssignment,
   AccountSpendDaily
 } from '~/domain'
-import { accountService, accountSpendService, channelService, mediaSyncService, productService, teamService } from '~/services'
+import { accountService, accountSpendService, accountAccessService, channelService, mediaSyncService, productService, teamService } from '~/services'
 
 const route = useRoute()
 const toast = useToast()
+const { userId: viewerUserId } = useCurrentUser()
 
 const accountId = computed(() => String(route.params.id ?? ''))
 
 const pending = ref(true)
 const notFound = ref(false)
+const forbidden = ref(false)
 const detail = ref<AccountDetailBundle | null>(null)
 const dailyRows = ref<AccountSpendDaily[]>([])
 const syncLogsForAccount = ref<Awaited<ReturnType<typeof mediaSyncService.getLogsForAccount>>>([])
@@ -82,7 +84,14 @@ const managerOptions = computed(() =>
 async function load() {
   pending.value = true
   notFound.value = false
+  forbidden.value = false
   try {
+    const canView = await accountAccessService.canViewAccount(viewerUserId.value, accountId.value)
+    if (!canView) {
+      detail.value = null
+      forbidden.value = true
+      return
+    }
     const bundle = await accountService.getAccountDetail(accountId.value)
     if (!bundle) {
       detail.value = null
@@ -100,7 +109,7 @@ async function load() {
   }
 }
 
-watch(accountId, () => { void load() }, { immediate: true })
+watch([accountId, viewerUserId], () => { void load() }, { immediate: true })
 
 function openTransfer() {
   transferTargetTeamId.value = undefined
@@ -422,6 +431,20 @@ const feeColumns: TableColumn<AccountServiceFeePolicyAssignment>[] = [
         <UButton to="/accounts" label="返回全部账户" variant="soft" />
       </div>
 
+      <div
+        v-else-if="forbidden"
+        class="flex flex-col items-center justify-center gap-3 py-20 text-muted"
+      >
+        <UIcon name="i-lucide-shield-off" class="size-10" />
+        <p class="text-sm">
+          无权查看此账户（Account Access）
+        </p>
+        <p class="text-xs">
+          可在左下角切换身份（Mock），或请 Team Manager 分配访问权限。
+        </p>
+        <UButton to="/accounts" label="返回全部账户" variant="soft" />
+      </div>
+
       <template v-else-if="detail">
         <AccountsAccountDetailHeader
           :account="detail.account"
@@ -477,13 +500,16 @@ const feeColumns: TableColumn<AccountServiceFeePolicyAssignment>[] = [
             <AccountsAccountSpendPanel
               :account="detail.account"
               :daily-rows="dailyRows"
+              @refreshed="load"
             />
           </template>
 
           <template v-else-if="activeTab === 'assignment'">
             <div class="space-y-4">
+              <AccountsAccountUserAccessPanel :account-id="accountId" />
+
               <h3 class="text-sm font-medium">
-                Team / Member 历史
+                Team / Member 历史（运营分配）
               </h3>
               <UTable :data="detail.history.assignments" :columns="assignmentColumns">
                 <template #startedAt-cell="{ row }">
@@ -666,8 +692,10 @@ const feeColumns: TableColumn<AccountServiceFeePolicyAssignment>[] = [
                 <p class="text-xs font-medium text-highlighted">最近 Sync Log</p>
                 <p v-if="!syncLogsForAccount.length" class="text-xs text-muted">
                   尚无与本账户相关的同步日志。可在
-                  <NuxtLink to="/settings/sync" class="text-primary underline">媒体同步</NuxtLink>
-                  运行发现。
+                  <NuxtLink to="/accounts/connections" class="text-primary underline">平台连接</NuxtLink>
+                  发现账户，或到
+                  <NuxtLink to="/settings/sync" class="text-primary underline">数据同步</NuxtLink>
+                  排障。
                 </p>
                 <ul v-else class="space-y-1.5 text-xs">
                   <li

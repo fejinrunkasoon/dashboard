@@ -342,6 +342,8 @@ const hasActiveFilters = computed(() => activeChips.value.length > 0)
         <p class="text-xs text-muted">
           按媒体动态展示 Platform Asset（BM / MCC / Business Center / Organization…），非写死 BM Management。
           关联账户数为当前生效 Assignment；点「查看账户」下钻全部账户列表。
+          登记新资产请到
+          <NuxtLink to="/settings/dictionary" class="text-primary underline">系统管理 → 数据字典 → 资产实例</NuxtLink>。
         </p>
 
         <div v-if="errorMessage" class="rounded-lg border border-error/30 bg-error/5 p-4 text-sm text-error">

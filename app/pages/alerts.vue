@@ -23,7 +23,8 @@ const typeFilterOptions = [
   { label: 'API_ACCESS_LOST', value: 'API_ACCESS_LOST' },
   { label: 'SYNC_FAILED', value: 'SYNC_FAILED' },
   { label: 'CREDENTIAL_EXPIRED', value: 'CREDENTIAL_EXPIRED' },
-  { label: 'RECONCILIATION_VARIANCE', value: 'RECONCILIATION_VARIANCE' }
+  { label: 'RECONCILIATION_VARIANCE', value: 'RECONCILIATION_VARIANCE' },
+  { label: 'CHANNEL_BALANCE_LOW', value: 'CHANNEL_BALANCE_LOW' }
 ]
 
 const severityFilterOptions = [

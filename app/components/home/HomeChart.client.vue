@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import { format, parseISO } from 'date-fns'
+import { parseISO } from 'date-fns'
 import { VisXYContainer, VisLine, VisAxis, VisArea, VisCrosshair, VisTooltip } from '@unovis/vue'
 import type { DashboardSpendTrendPoint } from '~/services'
+import type { Period } from '~/types'
+import { formatPeriodBucketLabel, periodBucketStart } from '~/utils/spend-aggregation'
 
 const cardRef = useTemplateRef<HTMLElement | null>('cardRef')
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   spendTrend: DashboardSpendTrendPoint[]
-}>()
+  period?: Period
+}>(), {
+  period: 'daily'
+})
 
 const { width } = useElementSize(cardRef)
 
@@ -23,6 +28,7 @@ const SERIES_COLORS = [
 type ChartRow = {
   date: Date
   dateStr: string
+  label: string
   total: number
   byMedia: Record<string, number>
 }
@@ -40,26 +46,46 @@ const mediaSeries = computed(() => {
 })
 
 const data = computed<ChartRow[]>(() => {
-  const byDate = new Map<string, ChartRow>()
+  type Bucket = {
+    dateStr: string
+    coveredFrom: string
+    coveredTo: string
+    total: number
+    byMedia: Record<string, number>
+  }
+  const byBucket = new Map<string, Bucket>()
+
   for (const point of props.spendTrend) {
-    let row = byDate.get(point.date)
+    const key = periodBucketStart(point.date, props.period)
+    let row = byBucket.get(key)
     if (!row) {
       row = {
-        date: parseISO(point.date),
-        dateStr: point.date,
+        dateStr: key,
+        coveredFrom: point.date,
+        coveredTo: point.date,
         total: 0,
         byMedia: {}
       }
-      byDate.set(point.date, row)
+      byBucket.set(key, row)
     }
+    if (point.date < row.coveredFrom) row.coveredFrom = point.date
+    if (point.date > row.coveredTo) row.coveredTo = point.date
     row.byMedia[point.mediaId] = (row.byMedia[point.mediaId] ?? 0) + point.spend
     row.total += point.spend
   }
-  return [...byDate.values()].sort((a, b) => a.dateStr.localeCompare(b.dateStr))
+
+  return [...byBucket.values()]
+    .sort((a, b) => a.dateStr.localeCompare(b.dateStr))
+    .map(row => ({
+      date: parseISO(row.dateStr),
+      dateStr: row.dateStr,
+      label: formatPeriodBucketLabel(props.period, row.dateStr, row.coveredFrom, row.coveredTo),
+      total: row.total,
+      byMedia: row.byMedia
+    }))
 })
 
 const x = (_: ChartRow, i: number) => i
-const yTotal = (d: ChartRow) => d.total
 
 const total = computed(() => data.value.reduce((acc, row) => acc + row.total, 0))
 
@@ -69,14 +95,15 @@ const formatNumber = new Intl.NumberFormat('en', {
   maximumFractionDigits: 0
 }).format
 
-const formatDate = (date: Date): string => format(date, 'd MMM')
-
 const xTicks = (i: number) => {
-  if (i === 0 || i === data.value.length - 1 || !data.value[i]) return ''
-  return formatDate(data.value[i]!.date)
+  const row = data.value[i]
+  if (!row) return ''
+  // Few buckets (week/month): show every tick. Dense daily: skip ends to reduce clutter.
+  if (data.value.length > 8 && (i === 0 || i === data.value.length - 1)) return ''
+  return row.label
 }
 
-const template = (d: ChartRow) => `${formatDate(d.date)}: ${formatNumber(d.total)}`
+const template = (d: ChartRow) => `${d.label}: ${formatNumber(d.total)}`
 
 function yForMedia(mediaId: string) {
   return (d: ChartRow) => d.byMedia[mediaId] ?? 0

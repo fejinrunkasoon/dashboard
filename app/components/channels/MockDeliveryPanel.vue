@@ -17,6 +17,7 @@ const emit = defineEmits<{
 }>()
 
 const toast = useToast()
+const { member } = useCurrentUser()
 const loading = ref(false)
 const confirming = ref(false)
 const rawText = ref('')
@@ -81,8 +82,8 @@ function fillSample() {
     ...accounts,
     '',
     'BM：',
-    'bm_9001',
-    'bm_9002'
+    '123456',
+    '555000111'
   ].join('\n')
 }
 
@@ -142,7 +143,10 @@ async function confirmDraft() {
   if (!canConfirmDraft.value || confirming.value) return
   confirming.value = true
   try {
-    const result = await demandService.confirmDeliveryFromDraft(props.order.id)
+    const result = await demandService.confirmDeliveryFromDraft(
+      props.order.id,
+      member.value?.id ?? null
+    )
     draft.value = null
     validation.value = null
     emit('updated', result.order)

@@ -1,256 +1,158 @@
 <script setup lang="ts">
-import { alertService } from '~/services'
-
-useSeoMeta({ title: '媒体同步 · Media Sync' })
-
-const toast = useToast()
-const router = useRouter()
+useSeoMeta({ title: '同步运维' })
 
 const {
-  credentials,
-  selectedCredentialId,
-  selectedBinding,
-  discoverGate,
   jobs,
   logs,
-  discovered,
-  pendingNew,
+  platforms,
+  selectedMediaId,
+  selectedJobId,
   pending,
-  running,
   errorMessage,
   refresh,
-  selectCredential,
-  runDiscovery,
-  confirmImport,
-  skipDiscovered
+  selectJob,
+  setMediaFilter
 } = useMediaSync()
 
 await refresh()
 
-const selectedIds = ref<string[]>([])
-const showImportModal = ref(false)
-const existenceAlerts = ref<Awaited<ReturnType<typeof alertService.getAlerts>>['items']>([])
+const mediaFilterItems = computed(() => [
+  { label: '全部媒体', value: null as string | null },
+  ...platforms.value.map(p => ({ label: p.name, value: p.id as string | null }))
+])
 
-const credentialItems = computed(() =>
-  credentials.value.map(c => ({
-    label: `${c.label} · ${c.status}`,
-    value: c.id
-  }))
-)
-
-async function loadExistenceAlerts() {
-  const result = await alertService.getAlerts({
-    types: ['API_ACCESS_LOST'],
-    statuses: ['OPEN', 'IN_PROGRESS'],
-    pageSize: 20
-  })
-  existenceAlerts.value = result.items
-}
-
-await loadExistenceAlerts()
-
-async function onRunDiscovery() {
-  try {
-    await runDiscovery()
-    selectedIds.value = []
-    await loadExistenceAlerts()
-    toast.add({ title: '发现完成', icon: 'i-lucide-check', color: 'success' })
-  } catch (error) {
-    toast.add({
-      title: '发现失败',
-      description: error instanceof Error ? error.message : '未知错误',
-      icon: 'i-lucide-alert-circle',
-      color: 'error'
-    })
-  }
-}
-
-async function onConfirmImport(payload: {
-  sourceChannelId: string | null
-  platformAssetId: string | null
-}) {
-  try {
-    const result = await confirmImport({
-      discoveredIds: [...selectedIds.value],
-      sourceChannelId: payload.sourceChannelId,
-      platformAssetId: payload.platformAssetId
-    })
-    showImportModal.value = false
-    selectedIds.value = []
-    toast.add({
-      title: `已导入 ${result.importedCount} 个账户`,
-      description: '状态 AVAILABLE，未自动分配',
-      icon: 'i-lucide-check',
-      color: 'success'
-    })
-  } catch (error) {
-    toast.add({
-      title: '导入失败',
-      description: error instanceof Error ? error.message : '未知错误',
-      icon: 'i-lucide-alert-circle',
-      color: 'error'
-    })
-  }
-}
-
-async function onSkip() {
-  if (!selectedIds.value.length) return
-  try {
-    const count = await skipDiscovered([...selectedIds.value])
-    selectedIds.value = []
-    toast.add({ title: `已跳过 ${count} 条`, icon: 'i-lucide-check', color: 'success' })
-  } catch (error) {
-    toast.add({
-      title: '跳过失败',
-      description: error instanceof Error ? error.message : '未知错误',
-      icon: 'i-lucide-alert-circle',
-      color: 'error'
-    })
-  }
-}
-
-function goAlerts(type: string) {
-  void router.push({ path: '/alerts', query: { types: type } })
+function statusColor(status: string) {
+  if (status === 'SUCCEEDED') return 'success'
+  if (status === 'FAILED') return 'error'
+  if (status === 'RUNNING') return 'warning'
+  return 'neutral'
 }
 </script>
 
 <template>
-  <div class="space-y-8">
+  <div class="space-y-6">
     <UPageCard
-      title="媒体同步 · Media Sync"
-      description="Mock 发现 / 去重 / 人工确认导入。Meta 优先。未确认发现结果不进 Matching Pool。入库 ≠ 分配。"
+      title="同步运维"
+      description="运维视角：按 Connection 记录的 Discovery Job / 日志。业务授权与账户导入请使用「账户中心 → 平台连接」。"
       variant="naked"
       orientation="horizontal"
-      class="mb-2"
     />
+
+    <UAlert
+      color="info"
+      variant="subtle"
+      icon="i-lucide-info"
+      title="进户入口已迁移"
+      description="不再通过 Credential 发现账户。发现与去重导入只在平台连接完成。"
+    >
+      <template #description>
+        <div class="mt-2 flex flex-wrap gap-2">
+          <UButton
+            label="去平台连接"
+            size="xs"
+            color="primary"
+            to="/accounts/connections"
+          />
+          <UButton
+            label="媒体平台开通"
+            size="xs"
+            color="neutral"
+            variant="soft"
+            to="/settings"
+          />
+        </div>
+      </template>
+    </UAlert>
 
     <UAlert
       v-if="errorMessage"
       color="error"
       variant="subtle"
-      icon="i-lucide-alert-circle"
       :title="errorMessage"
-      class="mb-2"
     />
 
-    <div class="flex flex-wrap items-end gap-3 rounded-lg border border-default p-4">
-      <UFormField label="Credential" class="min-w-64 flex-1">
+    <div class="flex flex-wrap items-end gap-3">
+      <UFormField label="媒体筛选">
         <USelectMenu
-          :model-value="selectedCredentialId ?? undefined"
-          :items="credentialItems"
+          :model-value="selectedMediaId"
+          :items="mediaFilterItems"
           value-key="value"
-          placeholder="选择 Credential"
-          class="w-full"
-          @update:model-value="(v: string) => selectCredential(v)"
+          class="w-48"
+          @update:model-value="(v: string | null) => setMediaFilter(v)"
         />
       </UFormField>
-      <div class="flex flex-wrap items-center gap-2">
-        <UButton
-          label="运行发现"
-          icon="i-lucide-radar"
-          color="primary"
-          :loading="running"
-          :disabled="!discoverGate.ok || pending"
-          @click="onRunDiscovery"
-        />
-        <UButton
-          label="刷新"
-          icon="i-lucide-refresh-cw"
-          color="neutral"
-          variant="soft"
-          :disabled="pending || running"
-          @click="refresh().then(loadExistenceAlerts)"
-        />
-      </div>
-      <p v-if="!discoverGate.ok" class="w-full text-xs text-muted">
-        {{ discoverGate.reason }}
-        <NuxtLink to="/settings" class="ml-2 text-primary underline">
-          去数据接入配置
-        </NuxtLink>
-      </p>
-      <p v-else-if="selectedBinding" class="w-full text-xs text-muted">
-        绑定：{{ selectedBinding.mediaName }} · {{ selectedBinding.implKey }}
-        · 待导入 NEW {{ pendingNew.length }}
-      </p>
-    </div>
-
-    <div class="grid gap-6 lg:grid-cols-2">
-      <div class="space-y-2">
-        <h3 class="text-sm font-semibold text-highlighted">Job 历史</h3>
-        <SettingsSyncSyncJobTable :jobs="jobs" :pending="pending" />
-      </div>
-      <div class="space-y-2">
-        <h3 class="text-sm font-semibold text-highlighted">最近 Sync Log</h3>
-        <SettingsSyncSyncLogList :logs="logs" :pending="pending" />
-      </div>
-    </div>
-
-    <div class="space-y-3">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <h3 class="text-sm font-semibold text-highlighted">发现结果</h3>
-        <div class="flex flex-wrap gap-2">
-          <UButton
-            label="确认导入"
-            color="primary"
-            size="sm"
-            :disabled="!selectedIds.length"
-            @click="showImportModal = true"
-          />
-          <UButton
-            label="跳过"
-            color="neutral"
-            variant="soft"
-            size="sm"
-            :disabled="!selectedIds.length"
-            @click="onSkip"
-          />
-        </div>
-      </div>
-      <SettingsSyncDiscoveredAccountTable
-        v-model:selected-ids="selectedIds"
-        :rows="discovered"
-        :pending="pending"
+      <UButton
+        label="刷新"
+        icon="i-lucide-refresh-cw"
+        color="neutral"
+        variant="soft"
+        :loading="pending"
+        @click="refresh"
       />
     </div>
 
-    <div class="space-y-3">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <h3 class="text-sm font-semibold text-highlighted">存在性异常（FFJ 有 · 媒体无）</h3>
-        <UButton
-          label="在预警中心查看"
-          size="xs"
-          color="neutral"
-          variant="ghost"
-          @click="goAlerts('API_ACCESS_LOST')"
-        />
-      </div>
-      <div
-        v-if="!existenceAlerts.length"
-        class="rounded-lg border border-dashed border-default p-4 text-sm text-muted"
-      >
-        暂无 OPEN 的 API_ACCESS_LOST。运行发现后，若库内 ACCESSIBLE 户未出现在媒体结果中，将在此列出。
-      </div>
-      <ul v-else class="space-y-2 rounded-lg border border-default p-3">
-        <li
-          v-for="alert in existenceAlerts"
-          :key="alert.id"
-          class="flex flex-wrap items-center justify-between gap-2 border-b border-default/50 pb-2 text-sm last:border-0 last:pb-0"
-        >
-          <div>
-            <span class="font-medium text-highlighted">{{ alert.title }}</span>
-            <span class="ml-2 font-mono text-xs text-muted">{{ alert.entityId }}</span>
-            <p class="text-xs text-muted">{{ alert.description }}</p>
-          </div>
-          <UBadge :label="alert.status" color="warning" variant="subtle" size="xs" />
-        </li>
-      </ul>
+    <div class="rounded-lg border border-default overflow-hidden">
+      <table class="w-full text-sm">
+        <thead class="bg-elevated/50 text-left text-muted">
+          <tr>
+            <th class="px-3 py-2 font-medium">Job</th>
+            <th class="px-3 py-2 font-medium">Connection</th>
+            <th class="px-3 py-2 font-medium">媒体 / impl</th>
+            <th class="px-3 py-2 font-medium">状态</th>
+            <th class="px-3 py-2 font-medium">统计</th>
+            <th class="px-3 py-2 font-medium">时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="!jobs.length">
+            <td colspan="6" class="px-3 py-8 text-center text-muted">
+              暂无 Job。在平台连接执行发现后会出现在这里。
+            </td>
+          </tr>
+          <tr
+            v-for="job in jobs"
+            :key="job.id"
+            class="border-t border-default cursor-pointer hover:bg-elevated/40"
+            :class="{ 'bg-elevated/60': selectedJobId === job.id }"
+            @click="selectJob(job.id)"
+          >
+            <td class="px-3 py-2 font-mono text-xs">{{ job.id }}</td>
+            <td class="px-3 py-2 font-mono text-xs">{{ job.connectionId || '—' }}</td>
+            <td class="px-3 py-2">{{ job.implKey }}</td>
+            <td class="px-3 py-2">
+              <UBadge :color="statusColor(job.status)" variant="subtle" size="sm">
+                {{ job.status }}
+              </UBadge>
+            </td>
+            <td class="px-3 py-2 text-xs text-muted">
+              {{ job.stats.discovered }} 发现 /
+              {{ job.stats.newCount }} 新 /
+              {{ job.stats.alreadyInFfj }} 已在库
+            </td>
+            <td class="px-3 py-2 text-xs text-muted">{{ job.startedAt }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
-    <SettingsSyncConfirmSyncImportModal
-      v-model:open="showImportModal"
-      :selected-count="selectedIds.length"
-      :media-id="selectedBinding?.mediaId ?? null"
-      @confirm="onConfirmImport"
-    />
+    <div class="rounded-lg border border-default p-4 space-y-2">
+      <h3 class="text-sm font-semibold text-highlighted">
+        日志
+        <span v-if="selectedJobId" class="font-normal text-muted">· {{ selectedJobId }}</span>
+      </h3>
+      <ul v-if="logs.length" class="space-y-1.5 max-h-64 overflow-auto">
+        <li
+          v-for="log in logs"
+          :key="log.id"
+          class="text-xs font-mono text-muted"
+        >
+          <span class="text-highlighted">[{{ log.level }}]</span>
+          {{ log.kind }} — {{ log.message }}
+        </li>
+      </ul>
+      <p v-else class="text-sm text-muted">
+        选择上方 Job 查看日志，或尚无记录。
+      </p>
+    </div>
   </div>
 </template>

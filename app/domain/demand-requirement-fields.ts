@@ -13,13 +13,46 @@ export interface DemandRequirementFieldDef {
   options?: { label: string; value: string }[]
 }
 
-export const DEMAND_TIMEZONE_OPTIONS: { label: string; value: string }[] = [
-  { label: 'GMT+8', value: 'GMT+8' },
-  { label: 'GMT+0', value: 'GMT+0' },
-  { label: 'GMT-5', value: 'GMT-5' },
-  { label: 'GMT-7', value: 'GMT-7' },
-  { label: 'GMT-8', value: 'GMT-8' }
-]
+/** Integer GMT offsets (-12 … +14) plus common fractional zones. */
+function buildGmtTimezoneOptions(): { label: string; value: string }[] {
+  const totalMinutes = new Set<number>()
+
+  for (let hour = -12; hour <= 14; hour++) {
+    totalMinutes.add(hour * 60)
+  }
+
+  // Common half-/quarter-hour offsets used worldwide
+  for (const minutes of [
+    -9 * 60 - 30,
+    -3 * 60 - 30,
+    3 * 60 + 30,
+    4 * 60 + 30,
+    5 * 60 + 30,
+    5 * 60 + 45,
+    6 * 60 + 30,
+    8 * 60 + 45,
+    9 * 60 + 30,
+    10 * 60 + 30,
+    12 * 60 + 45
+  ]) {
+    totalMinutes.add(minutes)
+  }
+
+  return [...totalMinutes]
+    .sort((a, b) => a - b)
+    .map((minutes) => {
+      const sign = minutes >= 0 ? '+' : '-'
+      const abs = Math.abs(minutes)
+      const h = Math.floor(abs / 60)
+      const m = abs % 60
+      const label = m === 0
+        ? `GMT${sign}${h}`
+        : `GMT${sign}${h}:${String(m).padStart(2, '0')}`
+      return { label, value: label }
+    })
+}
+
+export const DEMAND_TIMEZONE_OPTIONS: { label: string; value: string }[] = buildGmtTimezoneOptions()
 
 const commonTimezoneField: DemandRequirementFieldDef = {
   key: 'timezone',

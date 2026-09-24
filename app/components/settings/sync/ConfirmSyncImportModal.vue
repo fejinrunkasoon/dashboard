@@ -19,19 +19,16 @@ const sourceChannelId = ref<string | undefined>(undefined)
 const platformAssetId = ref<string | undefined>(undefined)
 const loading = ref(false)
 
-const channelItems = computed(() => [
-  { label: '不指定渠道', value: '' },
-  ...channels.value.map(c => ({ label: `${c.name} (${c.code})`, value: c.id }))
-])
+const channelItems = computed(() =>
+  channels.value.map(c => ({ label: `${c.name} (${c.code})`, value: c.id }))
+)
 
+/** No empty-string option: Reka/USelectMenu treats "" as "no value" and blocks opening. */
 const assetItems = computed(() => {
   const filtered = props.mediaId
     ? assets.value.filter(a => a.mediaId === props.mediaId)
     : assets.value
-  return [
-    { label: '不指定 Platform Asset', value: '' },
-    ...filtered.map(a => ({ label: `${a.name ?? a.externalId} (${a.externalId})`, value: a.id }))
-  ]
+  return filtered.map(a => ({ label: `${a.name ?? a.externalId} (${a.externalId})`, value: a.id }))
 })
 
 watch(open, async (value) => {
@@ -84,6 +81,7 @@ function onConfirm() {
                 :items="channelItems"
                 value-key="value"
                 placeholder="不指定"
+                :clear="true"
                 class="w-full"
               />
             </UFormField>
@@ -93,6 +91,7 @@ function onConfirm() {
                 :items="assetItems"
                 value-key="value"
                 placeholder="不指定"
+                :clear="true"
                 class="w-full"
               />
             </UFormField>

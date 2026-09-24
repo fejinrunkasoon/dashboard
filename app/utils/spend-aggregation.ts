@@ -1,7 +1,42 @@
-import { addDays, format, parseISO } from 'date-fns'
+import { addDays, format, parseISO, startOfMonth, startOfWeek } from 'date-fns'
 import type { AccountSpendDaily, AccountSpendMetrics, AccountSpendWindow } from '../domain/account'
 import type { SpendDateRange } from '../domain/common'
+import type { Period } from '~/types'
 import { remainingLimit } from './service-fee-calculator'
+
+/** Monday-start week bucket, or calendar month / day. */
+export function periodBucketStart(dateStr: string, period: Period): string {
+  const date = parseISO(dateStr)
+  if (period === 'weekly') {
+    return toDateString(startOfWeek(date, { weekStartsOn: 1 }))
+  }
+  if (period === 'monthly') {
+    return toDateString(startOfMonth(date))
+  }
+  return dateStr
+}
+
+/** Axis / tooltip label for a spend bucket (uses actual covered days when partial). */
+export function formatPeriodBucketLabel(
+  period: Period,
+  bucketStart: string,
+  coveredFrom: string,
+  coveredTo: string
+): string {
+  const from = parseISO(coveredFrom)
+  const to = parseISO(coveredTo)
+  if (period === 'monthly') {
+    return format(parseISO(bucketStart), 'MMM yyyy')
+  }
+  if (period === 'weekly') {
+    if (coveredFrom === coveredTo) return format(from, 'd MMM')
+    if (from.getMonth() === to.getMonth()) {
+      return `${format(from, 'd')}–${format(to, 'd MMM')}`
+    }
+    return `${format(from, 'd MMM')} – ${format(to, 'd MMM')}`
+  }
+  return format(from, 'd MMM')
+}
 
 export const MOCK_TODAY = '2026-09-16'
 export const DEFAULT_CURRENCY = 'USD'

@@ -4,6 +4,7 @@ import type {
   DiscoveredAccountQuery,
   SyncJob,
   SyncJobQuery,
+  SyncJobStats,
   SyncLog,
   SyncLogQuery
 } from '../../domain/sync'
@@ -24,16 +25,29 @@ export interface RunDiscoveryResult {
   discovered: DiscoveredAccount[]
 }
 
+export interface RecordConnectionDiscoveryInput {
+  jobId: string
+  connectionId: string
+  mediaId: string
+  platformAppId?: string | null
+  implKey: string
+  stats: SyncJobStats
+}
+
 export interface MediaSyncService {
+  /** @deprecated Credential discovery removed — use ConnectionService.discover */
   runDiscovery(credentialId: string): Promise<RunDiscoveryResult>
 
   listDiscovered(query?: DiscoveredAccountQuery): Promise<PagedResponse<DiscoveredAccount>>
   getJobs(query?: SyncJobQuery): Promise<PagedResponse<SyncJob>>
   getLogs(query?: SyncLogQuery): Promise<PagedResponse<SyncLog>>
 
+  /** @deprecated Import via ConnectionService.importAccounts */
   confirmImport(input: ConfirmSyncImportInput): Promise<ConfirmSyncImportResult>
   skipDiscovered(ids: string[]): Promise<number>
 
-  /** Recent sync logs for an FFJ account (API Data tab). */
   getLogsForAccount(accountId: string, limit?: number): Promise<SyncLog[]>
+
+  /** Record a discovery job started from 平台连接 (ops visibility). */
+  recordConnectionDiscoveryJob(input: RecordConnectionDiscoveryInput): Promise<SyncJob>
 }

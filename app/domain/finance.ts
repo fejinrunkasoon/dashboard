@@ -130,6 +130,36 @@ export interface SettlementQuery {
   currency?: string
 }
 
+/** Shared fund pool for a channel × ownership tag (自家 / 外接). */
+export interface ChannelOwnershipFundSummary {
+  channelId: string
+  ownership: ProductOwnership
+  currency: string
+  prepaid: number
+  refunded: number
+  mediaSpend: number
+  serviceFee: number
+  settlementCost: number
+  remaining: number
+  /** Avg daily settlement cost over last `runwayLookbackDays` (for runway alerts). */
+  avgDailySettlement: number
+  runwayDays: number | null
+}
+
+/** Per-channel (or org-default when channelId null) balance health thresholds. */
+export interface ChannelBalanceThreshold {
+  id: string
+  /** null = organization-wide default */
+  channelId: string | null
+  absoluteBalanceBelow: number | null
+  daysOfRunwayBelow: number | null
+  /** Lookback window for avg daily settlement (default 7). */
+  runwayLookbackDays: number
+  enabledTags: ProductOwnership[]
+  severity: 'WARNING' | 'URGENT'
+  updatedAt: string
+}
+
 export type ChannelReconciliationStatus = 'OPEN' | 'CONFIRMED'
 
 /** Channel bill vs system Media Spend. Not a fund ledger. */

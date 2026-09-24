@@ -4,6 +4,8 @@ import type {
   AccountMonthlySettlement,
   AdAccountListItem,
   ChannelAccountOrder,
+  ChannelBalanceThreshold,
+  ChannelOwnershipFundSummary,
   ChannelPaymentAddress,
   ChannelPaymentAddressType,
   ChannelPrepayment,
@@ -49,6 +51,8 @@ const settlementRows = ref<AccountMonthlySettlement[]>([])
 const feePolicies = ref<ServiceFeePolicy[]>([])
 const tiersByPolicyId = ref<Record<string, ServiceFeeTier[]>>({})
 const reconciliations = ref<ChannelReconciliation[]>([])
+const fundSummaries = ref<ChannelOwnershipFundSummary[]>([])
+const balanceThreshold = ref<ChannelBalanceThreshold | null>(null)
 const teamOptions = ref<{ label: string, value: string, leaderMemberId?: string | null }[]>([])
 const mediaNameById = ref<Record<string, string>>({})
 const assetTypeNameById = ref<Record<string, string>>({})
@@ -187,7 +191,7 @@ async function load() {
     detail.value = bundle
     useSeoMeta({ title: `${bundle.channel.name} · 渠道详情` })
 
-    const [orderPage, accountPage, platformAssets, addresses, pays, refs, summary, accountSettlements, medias, types, policies, reconRows, orgTeams] = await Promise.all([
+    const [orderPage, accountPage, platformAssets, addresses, pays, refs, summary, accountSettlements, medias, types, policies, reconRows, orgTeams, funds, threshold] = await Promise.all([
       demandService.getChannelAccountOrders({ channelIds: [channelId.value], page: 1, pageSize: 50 }),
       accountService.getAccounts({ channelIds: [channelId.value], page: 1, pageSize: 20 }),
       mediaService.getPlatformAssets({ channelIds: [channelId.value] }),
@@ -208,7 +212,9 @@ async function load() {
       mediaService.getPlatformAssetTypes(),
       channelService.getServiceFeePolicies(channelId.value),
       channelService.getReconciliations(channelId.value),
-      organizationService.getTeams()
+      organizationService.getTeams(),
+      channelService.getOwnershipFundSummaries(channelId.value),
+      channelService.getBalanceThreshold(channelId.value)
     ])
 
     orders.value = orderPage.data
@@ -221,6 +227,8 @@ async function load() {
     settlementRows.value = accountSettlements
     feePolicies.value = policies
     reconciliations.value = reconRows
+    fundSummaries.value = funds
+    balanceThreshold.value = threshold
     teamOptions.value = orgTeams.map(item => ({
       label: item.name,
       value: item.id,
@@ -284,6 +292,7 @@ async function confirmPay() {
       color: 'success'
     })
     prepayments.value = await channelService.getPrepayments(channelId.value)
+    fundSummaries.value = await channelService.getOwnershipFundSummaries(channelId.value)
   } catch (error) {
     toast.add({
       title: '登记失败',
@@ -295,7 +304,7 @@ async function confirmPay() {
 }
 
 async function reloadFinanceSlices() {
-  const [addresses, pays, refs, policies, reconRows, summary, accountSettlements] = await Promise.all([
+  const [addresses, pays, refs, policies, reconRows, summary, accountSettlements, funds, threshold] = await Promise.all([
     channelService.getPaymentAddresses(channelId.value),
     channelService.getPrepayments(channelId.value),
     channelService.getRefunds(channelId.value),
@@ -310,7 +319,9 @@ async function reloadFinanceSlices() {
       channelId: channelId.value,
       year: settlementYear,
       month: settlementMonth
-    })
+    }),
+    channelService.getOwnershipFundSummaries(channelId.value),
+    channelService.getBalanceThreshold(channelId.value)
   ])
   paymentAddresses.value = addresses
   prepayments.value = pays
@@ -319,6 +330,8 @@ async function reloadFinanceSlices() {
   reconciliations.value = reconRows
   settlementSummary.value = summary
   settlementRows.value = accountSettlements
+  fundSummaries.value = funds
+  balanceThreshold.value = threshold
   const tierEntries = await Promise.all(
     policies.map(async (policy) => {
       const tiers = await channelService.getServiceFeeTiers(policy.id)
@@ -543,6 +556,22 @@ async function rejectRefund(row: ChannelRefund) {
     await reloadFinanceSlices()
   } catch (error) {
     toastError('驳回失败', error)
+  }
+}
+
+async function saveBalanceThreshold(patch: Partial<ChannelBalanceThreshold>) {
+  try {
+    balanceThreshold.value = await channelService.updateBalanceThreshold(channelId.value, {
+      absoluteBalanceBelow: patch.absoluteBalanceBelow ?? null,
+      daysOfRunwayBelow: patch.daysOfRunwayBelow ?? null,
+      runwayLookbackDays: patch.runwayLookbackDays ?? 7,
+      enabledTags: patch.enabledTags ?? ['INTERNAL'],
+      severity: patch.severity ?? 'WARNING'
+    })
+    fundSummaries.value = await channelService.getOwnershipFundSummaries(channelId.value)
+    toast.add({ title: '余额阈值已保存', icon: 'i-lucide-check', color: 'success' })
+  } catch (error) {
+    toastError('保存阈值失败', error)
   }
 }
 
@@ -1120,6 +1149,8 @@ const reconColumns: TableColumn<ChannelReconciliation>[] = [
               :tiers-by-policy-id="tiersByPolicyId"
               :policy-code-by-id="policyCodeById"
               :can-pay="activeAddresses.length > 0"
+              :fund-summaries="fundSummaries"
+              :balance-threshold="balanceThreshold"
               @pay="openPayModal"
               @add-address="openAddressModal()"
               @edit-address="openAddressModal"
@@ -1132,6 +1163,7 @@ const reconColumns: TableColumn<ChannelReconciliation>[] = [
               @add-refund="openRefundModal"
               @confirm-refund="confirmRefund"
               @reject-refund="rejectRefund"
+              @save-threshold="saveBalanceThreshold"
             />
           </template>
 
@@ -1193,6 +1225,19 @@ const reconColumns: TableColumn<ChannelReconciliation>[] = [
           </template>
 
           <template v-else-if="activeTab === 'profile'">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <p class="text-xs text-muted">
+                主数据只读。编制请到系统管理。
+              </p>
+              <UButton
+                label="编辑渠道"
+                size="xs"
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-pencil"
+                :to="`/settings/channels?highlight=${detail.channel.id}`"
+              />
+            </div>
             <div class="grid sm:grid-cols-2 gap-3 text-sm">
               <p>
                 <span class="text-muted">Code：</span>

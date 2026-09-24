@@ -32,4 +32,9 @@ export interface AlertService {
   ensureApiAccessLostAlert(accountId: string): Promise<Alert>
   reportSyncFailed(jobId: string, message: string): Promise<Alert>
   resolveShortageAlertsForDemandItem(demandItemId: string): Promise<number>
+  ensureChannelBalanceAlerts(
+    channelId: string,
+    summaries: import('../../domain/finance').ChannelOwnershipFundSummary[],
+    threshold: import('../../domain/finance').ChannelBalanceThreshold
+  ): Promise<void>
 }

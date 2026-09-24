@@ -1,8 +1,16 @@
 <script setup lang="ts">
+import {
+  getOrgDefaultBalanceThreshold,
+  updateOrgDefaultBalanceThreshold
+} from '~/services/channels/balance-threshold'
+
 useSeoMeta({ title: '规则配置' })
 
+const orgThreshold = getOrgDefaultBalanceThreshold()
+
 const alertThresholds = reactive({
-  balanceWarningDays: 5,
+  balanceWarningDays: orgThreshold.daysOfRunwayBelow ?? 5,
+  absoluteBalanceBelow: orgThreshold.absoluteBalanceBelow ?? 1000,
   idleAccountDays: 7,
   banRateThreshold: 10,
   consumptionDropPercent: 50,
@@ -19,9 +27,16 @@ const autoRules = reactive({
 const toast = useToast()
 
 function onSave() {
+  updateOrgDefaultBalanceThreshold({
+    daysOfRunwayBelow: alertThresholds.balanceWarningDays,
+    absoluteBalanceBelow: alertThresholds.absoluteBalanceBelow,
+    runwayLookbackDays: 7,
+    enabledTags: ['INTERNAL'],
+    severity: 'WARNING'
+  })
   toast.add({
     title: '已保存',
-    description: '规则与阈值配置已更新（Mock）。',
+    description: '全局余额阈值已写入；渠道 Finance 可覆盖。',
     icon: 'i-lucide-check',
     color: 'success'
   })
@@ -32,7 +47,7 @@ function onSave() {
   <div class="space-y-6">
     <UPageCard
       title="规则配置"
-      description="设置预警阈值和自动化规则。对账业务记录在渠道中心处理，本页只保留差异阈值与自动对账开关。"
+      description="设置预警阈值和自动化规则。对账业务记录在渠道中心处理；渠道可在 Finance 覆盖余额阈值。"
       variant="naked"
       orientation="horizontal"
       class="mb-2"
@@ -49,11 +64,20 @@ function onSave() {
     <UPageCard title="预警阈值" variant="subtle">
       <UFormField
         name="balanceWarningDays"
-        label="余额预警天数"
-        description="渠道余额低于此天数消耗量时触发预警。"
+        label="余额预警天数（全局默认）"
+        description="渠道标签池预计可用天数低于此值时触发 CHANNEL_BALANCE_LOW（渠道页可覆盖）。"
         class="flex max-sm:flex-col justify-between items-start gap-4"
       >
         <UInput v-model="alertThresholds.balanceWarningDays" type="number" class="w-24" />
+      </UFormField>
+      <USeparator />
+      <UFormField
+        name="absoluteBalanceBelow"
+        label="余额金额阈值（全局默认）"
+        description="渠道标签池剩余低于此金额时触发预警。"
+        class="flex max-sm:flex-col justify-between items-start gap-4"
+      >
+        <UInput v-model="alertThresholds.absoluteBalanceBelow" type="number" class="w-32" />
       </UFormField>
       <USeparator />
       <UFormField
