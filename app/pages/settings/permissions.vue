@@ -146,13 +146,6 @@ const matrixRows = computed(() =>
   }))
 )
 
-const allowedCapabilities = computed(() =>
-  capabilityLabels.filter(item => selectedRoleGuide.value[item.key])
-)
-const deniedCapabilities = computed(() =>
-  capabilityLabels.filter(item => !selectedRoleGuide.value[item.key])
-)
-
 const matrixColumns: TableColumn<{
   key: CapabilityKey
   label: string
@@ -341,51 +334,12 @@ function statusColor(status: string) {
       </button>
     </div>
 
-    <div class="grid gap-6 lg:grid-cols-2">
+    <div class="grid gap-6 lg:grid-cols-2 items-start">
       <div class="space-y-3">
-        <h3 class="text-sm font-semibold text-highlighted">
-          {{ APP_ROLE_META[selectedRoleId].label }} · 能力说明（只读）
-        </h3>
-        <p class="text-xs text-muted">
-          {{ APP_ROLE_META[selectedRoleId].description }}
-        </p>
-        <div class="grid gap-2 sm:grid-cols-2">
-          <div class="rounded-lg border border-default p-3 space-y-1.5">
-            <p class="text-xs font-medium text-success">
-              可以
-            </p>
-            <ul class="space-y-1">
-              <li
-                v-for="item in allowedCapabilities"
-                :key="item.key"
-                class="text-xs text-highlighted flex items-start gap-1.5"
-              >
-                <UIcon name="i-lucide-check" class="size-3.5 mt-0.5 shrink-0 text-success" />
-                <span>{{ item.label }}</span>
-              </li>
-            </ul>
-            <p v-if="!allowedCapabilities.length" class="text-xs text-muted">
-              —
-            </p>
-          </div>
-          <div class="rounded-lg border border-default p-3 space-y-1.5">
-            <p class="text-xs font-medium text-muted">
-              不可以
-            </p>
-            <ul class="space-y-1">
-              <li
-                v-for="item in deniedCapabilities"
-                :key="item.key"
-                class="text-xs text-muted flex items-start gap-1.5"
-              >
-                <UIcon name="i-lucide-x" class="size-3.5 mt-0.5 shrink-0" />
-                <span>{{ item.label }}</span>
-              </li>
-            </ul>
-            <p v-if="!deniedCapabilities.length" class="text-xs text-muted">
-              —
-            </p>
-          </div>
+        <div class="flex items-center justify-between gap-2 min-h-9">
+          <h3 class="text-sm font-semibold text-highlighted">
+            {{ APP_ROLE_META[selectedRoleId].label }} · 能力说明
+          </h3>
         </div>
         <div class="overflow-x-auto rounded-lg border border-default">
           <UTable :data="matrixRows" :columns="matrixColumns" class="shrink-0">
@@ -410,11 +364,12 @@ function statusColor(status: string) {
       </div>
 
       <div class="space-y-3">
-        <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center justify-between gap-2 min-h-9">
           <h3 class="text-sm font-semibold text-highlighted">应用用户</h3>
           <USelect
             v-model="roleFilter"
             :items="roleFilterItems"
+            size="sm"
             class="w-40"
           />
         </div>
