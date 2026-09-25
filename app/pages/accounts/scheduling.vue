@@ -17,7 +17,7 @@ useSeoMeta({ title: '需求调度' })
 const toast = useToast()
 const route = useRoute()
 const router = useRouter()
-const ALLOCATOR = 'mem-lisi'
+const { userId, member, canAllocateAccounts } = useCurrentUser()
 
 const mediaPlatforms = await mediaService.getMediaPlatforms()
 const products = await productService.getProducts()
@@ -46,8 +46,12 @@ const demandStatusLabel: Record<string, string> = {
 }
 
 const mediaName = (id: string) => mediaPlatforms.find(item => item.id === id)?.name ?? id
-const productName = (id: string | null | undefined) =>
-  id ? (products.find(item => item.id === id)?.name ?? id) : '—'
+const productName = (id: string | null | undefined) => {
+  if (!id) return '—'
+  const product = products.find(item => item.id === id)
+  if (!product) return id
+  return product.ownershipType === 'EXTERNAL' ? '外接' : '自家'
+}
 const teamName = (id: string) => teams.find(item => item.id === id)?.name ?? id
 
 const selectedRow = computed(() =>
@@ -110,18 +114,28 @@ async function selectItem(row: SchedulingDemandItemRow) {
 
 async function runAllocate() {
   if (!selectedItemId.value || !selectedAccountIds.value.length || !memberId.value || !managerId.value || allocating.value) return
+  if (!canAllocateAccounts.value || !member.value) {
+    toast.add({
+      title: '无分配权限',
+      description: '仅 PLATFORM_ADMIN / ORG_ADMIN / TEAM_MANAGER 可分配账户',
+      color: 'error',
+      icon: 'i-lucide-shield-alert'
+    })
+    return
+  }
   allocating.value = true
   try {
     const result = await demandService.allocate({
       demandItemId: selectedItemId.value,
       accountIds: selectedAccountIds.value,
-      allocatedBy: ALLOCATOR,
+      allocatedBy: member.value.id,
       memberId: memberId.value,
       managerId: managerId.value,
-      reason: 'Demand scheduling allocate'
+      reason: 'Demand scheduling allocate',
+      actorUserId: userId.value
     })
     toast.add({
-      title: 'DEMAND 分配成功',
+      title: '需求分配成功',
       description: `${result.assignmentIds.length} 户 → ${result.demand.demandNo}（${result.demand.status}）`,
       icon: 'i-lucide-check',
       color: 'success'
@@ -214,16 +228,16 @@ onMounted(async () => {
 })
 
 const demandColumns: TableColumn<SchedulingDemandItemRow>[] = [
-  { accessorKey: 'demandNo', header: 'Demand' },
+  { accessorKey: 'demandNo', header: '需求号' },
   { id: 'team', header: '团队' },
   { id: 'status', header: '状态' },
-  { id: 'media', header: 'Media' },
-  { id: 'timezone', header: 'Timezone' },
+  { id: 'media', header: '媒体' },
+  { id: 'timezone', header: '时区' },
   { accessorKey: 'requestedQuantity', header: '申请' },
   { accessorKey: 'allocatedQuantity', header: '已分配' },
   { accessorKey: 'remainingQuantity', header: '剩余' },
   { accessorKey: 'poolMatchCount', header: '池匹配' },
-  { id: 'shortage', header: 'Shortage' },
+  { id: 'shortage', header: '缺口' },
   { id: 'actions', header: '' }
 ]
 
@@ -262,10 +276,10 @@ function poolCell(row: Row<AdAccountListItem>) {
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 class="text-sm font-semibold text-highlighted">
-            需求调度 · Allocation Source: DEMAND
+            需求调度 · 分配来源：需求
           </h2>
           <p class="text-xs text-muted mt-1">
-            系统按 Media + Timezone 计算 Matching Pool；管理员确认后 Allocate。DIRECT 请在账户池操作。
+            系统按媒体 + 时区计算匹配池；管理员确认后分配。直接分配请在账户池操作。
           </p>
         </div>
         <UButton
@@ -289,7 +303,7 @@ function poolCell(row: Row<AdAccountListItem>) {
         class="flex flex-col items-center justify-center gap-2 py-16 text-muted text-sm"
       >
         <UIcon name="i-lucide-inbox" class="size-8" />
-        <p>当前无待调度 Demand（APPROVED / PARTIALLY_ALLOCATED）</p>
+        <p>当前无待调度需求（已审批 / 部分分配）</p>
       </div>
 
       <template v-else>
@@ -355,7 +369,7 @@ function poolCell(row: Row<AdAccountListItem>) {
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 class="text-sm font-medium text-highlighted">
-                Matching Pool · {{ selectedRow.demandNo }}
+                匹配池 · {{ selectedRow.demandNo }}
               </h3>
               <p class="text-xs text-muted mt-0.5">
                 {{ mediaName(selectedRow.mediaId) }}
@@ -363,7 +377,7 @@ function poolCell(row: Row<AdAccountListItem>) {
                 · 产品 {{ productName(selectedRow.productId) }}
                 · 剩余 {{ selectedRow.remainingQuantity }}
                 · 池匹配 {{ selectedRow.poolMatchCount }}
-                · Shortage {{ selectedRow.shortage }}
+                · 缺口 {{ selectedRow.shortage }}
               </p>
             </div>
             <div class="flex flex-wrap items-end gap-2">
@@ -387,7 +401,7 @@ function poolCell(row: Row<AdAccountListItem>) {
               </UFormField>
               <UButton
                 v-if="selectedRow.shortage > 0"
-                label="创建 Channel Order"
+                label="创建渠道订单"
                 size="xs"
                 color="neutral"
                 variant="outline"
@@ -395,7 +409,8 @@ function poolCell(row: Row<AdAccountListItem>) {
                 @click="openShortageOrder"
               />
               <UButton
-                label="Allocate"
+                v-if="canAllocateAccounts"
+                label="分配"
                 size="xs"
                 color="primary"
                 icon="i-lucide-check-check"
@@ -403,6 +418,12 @@ function poolCell(row: Row<AdAccountListItem>) {
                 :disabled="!selectedAccountIds.length || !memberId || !managerId || selectedAccountIds.length > selectedRow.remainingQuantity"
                 @click="allocateSelected"
               />
+              <p
+                v-else
+                class="text-xs text-muted"
+              >
+                仅管理者 / 管理员可分配
+              </p>
             </div>
           </div>
 
@@ -414,7 +435,7 @@ function poolCell(row: Row<AdAccountListItem>) {
             v-else-if="!poolRows.length"
             class="text-sm text-muted py-8 text-center"
           >
-            无匹配库存。可创建 Channel Order 补库。
+            无匹配库存。可创建渠道订单补库。
           </div>
           <UTable v-else :data="poolRows" :columns="poolColumns">
             <template #select-cell="{ row }">
@@ -427,7 +448,7 @@ function poolCell(row: Row<AdAccountListItem>) {
               <span class="font-mono text-sm">{{ poolCell(row).externalAccountId }}</span>
               <UBadge
                 v-if="poolCell(row).apiAccessStatus === 'LOST'"
-                label="LOST"
+                label="已失效"
                 color="warning"
                 variant="subtle"
                 size="xs"

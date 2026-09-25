@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { TeamDetailBundle, TeamMetrics } from '~/services'
 import { formatCurrency } from '~/utils'
+import { ENTITY_STATUS_LABEL, labelOf } from '~/utils/labels'
 
 const props = defineProps<{
   detail: TeamDetailBundle
@@ -21,14 +22,14 @@ function usageColor(rate: number): 'success' | 'warning' | 'error' {
 const kpiItems = computed(() => {
   const metrics: TeamMetrics = m.value
   return [
-    { label: 'Accounts', value: String(metrics.accounts) },
-    { label: 'In Use', value: String(metrics.inUse) },
-    { label: 'Idle', value: String(metrics.idle) },
-    { label: 'Usage Rate', value: `${metrics.usageRate}%`, badge: true },
-    { label: 'Today', value: formatCurrency(metrics.todaySpend) },
+    { label: '账户', value: String(metrics.accounts) },
+    { label: '使用中', value: String(metrics.inUse) },
+    { label: '闲置', value: String(metrics.idle) },
+    { label: '使用率', value: `${metrics.usageRate}%`, badge: true },
+    { label: '今日', value: formatCurrency(metrics.todaySpend) },
     { label: '7D', value: formatCurrency(metrics.spend7d) },
-    { label: 'Ban Rate', value: `${metrics.banRate}%`, warn: metrics.banRate > 10 },
-    { label: 'Unfulfilled', value: String(metrics.unfulfilledDemand), warn: metrics.unfulfilledDemand > 0 }
+    { label: '封禁率', value: `${metrics.banRate}%`, warn: metrics.banRate > 10 },
+    { label: '未满足', value: String(metrics.unfulfilledDemand), warn: metrics.unfulfilledDemand > 0 }
   ]
 })
 </script>
@@ -42,7 +43,7 @@ const kpiItems = computed(() => {
             {{ detail.team.name }}
           </h1>
           <UBadge :label="detail.team.code" variant="subtle" color="neutral" size="xs" class="font-mono" />
-          <UBadge :label="detail.team.status" variant="subtle" size="xs" />
+          <UBadge :label="labelOf(ENTITY_STATUS_LABEL, detail.team.status)" variant="subtle" size="xs" />
         </div>
         <p class="text-sm text-muted">
           负责人：{{ detail.leader?.name ?? '—' }}

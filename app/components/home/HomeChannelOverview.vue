@@ -4,6 +4,7 @@ import { formatCurrency } from '~/utils'
 
 defineProps<{
   channels: DashboardChannelRow[]
+  rangeDays: number
 }>()
 </script>
 
@@ -12,7 +13,7 @@ defineProps<{
     <template #header>
       <div class="flex items-center justify-between gap-2">
         <p class="text-xs text-muted uppercase">
-          渠道概览
+          渠道概览 · {{ rangeDays }} 日消耗
         </p>
         <div class="flex items-center gap-2">
           <UButton
@@ -55,7 +56,7 @@ defineProps<{
           </p>
         </div>
         <p class="text-sm tabular-nums text-highlighted shrink-0">
-          {{ formatCurrency(row.spend30d) }}
+          {{ formatCurrency(row.spend) }}
         </p>
       </NuxtLink>
     </div>

@@ -20,7 +20,10 @@ import { MOCK_TODAY } from '../app/utils/spend-aggregation'
 
 const LEADER = 'mem-wangwu'
 const MEMBER = 'mem-zhangsan'
-const ALLOCATOR = 'mem-lisi'
+/** Audit member id for successful allocates — TEAM_MANAGER. */
+const ALLOCATOR = 'mem-zhangsan'
+const ALLOCATOR_USER = 'user-zhangsan'
+const MEMBER_USER = 'user-lisi'
 const MANAGER = 'mem-lisi'
 const NON_LEADER = 'mem-lisi'
 
@@ -103,7 +106,8 @@ async function stepApproval() {
       accountIds: ['acc-pool-meta-2'],
       allocatedBy: ALLOCATOR,
       memberId: MEMBER,
-      managerId: MANAGER
+      managerId: MANAGER,
+      actorUserId: ALLOCATOR_USER
     }),
     /cannot be allocated/i
   )
@@ -128,9 +132,38 @@ async function stepAllocateAndGuards(itemId: string) {
       accountIds: ['acc-banned-1'],
       allocatedBy: ALLOCATOR,
       memberId: MEMBER,
-      managerId: MANAGER
+      managerId: MANAGER,
+      actorUserId: ALLOCATOR_USER
     }),
     /not in the allocatable pool/i
+  )
+
+  await expectReject(
+    'TEAM_MEMBER 不可 Allocate',
+    () => demandService.allocate({
+      demandItemId: itemId,
+      accountIds: ['acc-pool-meta-2'],
+      allocatedBy: NON_LEADER,
+      memberId: MEMBER,
+      managerId: MANAGER,
+      actorUserId: MEMBER_USER
+    }),
+    /TEAM_MANAGER can allocate/i
+  )
+
+  await expectReject(
+    'TEAM_MEMBER 不可 DIRECT 分配',
+    () => accountService.assignDirect({
+      accountIds: ['acc-pool-google-1'],
+      teamId: 'team-a',
+      memberId: MEMBER,
+      managerId: MANAGER,
+      productId: 'prd-app-a',
+      reason: 'member should fail',
+      createdBy: NON_LEADER,
+      actorUserId: MEMBER_USER
+    }),
+    /TEAM_MANAGER can allocate/i
   )
 
   // LOST credential path on a separate GMT-5 demand (seed acc-pool-meta-1 is LOST)
@@ -160,7 +193,8 @@ async function stepAllocateAndGuards(itemId: string) {
     accountIds: ['acc-pool-meta-1'],
     allocatedBy: ALLOCATOR,
     memberId: MEMBER,
-    managerId: MANAGER
+    managerId: MANAGER,
+    actorUserId: ALLOCATOR_USER
   })
   if (lostAlloc.demand.status !== 'FULFILLED') fail('LOST 户仍可分配', lostAlloc.demand.status)
   else ok('LOST 户确认后仍可分配')
@@ -182,7 +216,8 @@ async function stepAllocateAndGuards(itemId: string) {
     accountIds: ['acc-pool-meta-2'],
     allocatedBy: ALLOCATOR,
     memberId: MEMBER,
-    managerId: MANAGER
+    managerId: MANAGER,
+    actorUserId: ALLOCATOR_USER
   })
   if (result.demand.status !== 'PARTIALLY_ALLOCATED') {
     fail('主链 Allocate → PARTIALLY_ALLOCATED', result.demand.status)
@@ -418,7 +453,8 @@ async function stepReallocate(itemId: string, fillAccountIds: string[]) {
     accountIds: fillAccountIds,
     allocatedBy: ALLOCATOR,
     memberId: MEMBER,
-    managerId: MANAGER
+    managerId: MANAGER,
+    actorUserId: ALLOCATOR_USER
   })
   if (result.demand.status !== 'FULFILLED') fail('再 Allocate → FULFILLED', result.demand.status)
   else ok('再 Allocate → FULFILLED')
@@ -461,7 +497,8 @@ async function stepIdleRecycle() {
     accountIds: ['acc-pool-google-1'],
     allocatedBy: ALLOCATOR,
     memberId: MEMBER,
-    managerId: MANAGER
+    managerId: MANAGER,
+    actorUserId: ALLOCATOR_USER
   })
   accountSpendDaily.push({
     accountId: 'acc-pool-google-1',
@@ -503,7 +540,8 @@ async function stepIdleRecycle() {
     accountIds: ['acc-pool-tiktok-1'],
     allocatedBy: ALLOCATOR,
     memberId: MEMBER,
-    managerId: MANAGER
+    managerId: MANAGER,
+    actorUserId: ALLOCATOR_USER
   })
   const autoAlloc = demandAllocations.find(
     a => a.demandItemId === autoItem.id && a.accountId === 'acc-pool-tiktok-1'
@@ -544,7 +582,8 @@ async function stepIdleRecycle() {
     accountIds: ['acc-pool-snap-2'],
     allocatedBy: ALLOCATOR,
     memberId: MEMBER,
-    managerId: MANAGER
+    managerId: MANAGER,
+    actorUserId: ALLOCATOR_USER
   })
   for (let i = accountSpendDaily.length - 1; i >= 0; i -= 1) {
     const row = accountSpendDaily[i]!

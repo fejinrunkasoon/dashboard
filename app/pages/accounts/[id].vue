@@ -11,7 +11,12 @@ import { accountService, accountSpendService, accountAccessService, channelServi
 
 const route = useRoute()
 const toast = useToast()
-const { userId: viewerUserId } = useCurrentUser()
+const {
+  userId: viewerUserId,
+  member: currentMember,
+  canAllocateAccounts,
+  canChangeAccountManager
+} = useCurrentUser()
 
 const accountId = computed(() => String(route.params.id ?? ''))
 
@@ -27,12 +32,12 @@ const members = await teamService.getMembers()
 const products = await productService.getProducts()
 
 const tabs = [
-  { label: 'Overview', value: 'overview' },
-  { label: 'Spend', value: 'spend' },
-  { label: 'Assignment', value: 'assignment' },
-  { label: 'Product', value: 'product' },
-  { label: 'Status', value: 'status' },
-  { label: 'API Data', value: 'api' }
+  { label: '概览', value: 'overview' },
+  { label: '消耗', value: 'spend' },
+  { label: '分配', value: 'assignment' },
+  { label: '产品', value: 'product' },
+  { label: '状态', value: 'status' },
+  { label: 'API 数据', value: 'api' }
 ]
 
 const activeTab = ref('overview')
@@ -52,6 +57,8 @@ const recycleReason = ref('')
 const disableReason = ref('')
 const assignTargetTeamId = ref<string | undefined>()
 const assignTargetMemberId = ref<string | undefined>()
+const assignManagerId = ref<string | undefined>()
+const assignProductId = ref<string | undefined>()
 const assignReason = ref('')
 const changeProductId = ref<string | undefined>()
 const changeProductReason = ref('')
@@ -80,6 +87,19 @@ const productOptions = computed(() =>
 const managerOptions = computed(() =>
   members.map(item => ({ label: item.name, value: item.id }))
 )
+
+const canConfirmAssign = computed(() =>
+  Boolean(
+    assignTargetTeamId.value
+    && assignTargetMemberId.value
+    && assignManagerId.value
+    && assignProductId.value
+  )
+)
+
+watch(assignTargetTeamId, () => {
+  assignTargetMemberId.value = undefined
+})
 
 async function load() {
   pending.value = true
@@ -131,6 +151,8 @@ function openDisable() {
 function openAssign() {
   assignTargetTeamId.value = undefined
   assignTargetMemberId.value = undefined
+  assignManagerId.value = undefined
+  assignProductId.value = undefined
   assignReason.value = ''
   showAssignModal.value = true
 }
@@ -142,6 +164,15 @@ function openChangeProduct() {
 }
 
 function openChangeManager() {
+  if (!canChangeAccountManager.value) {
+    toast.add({
+      title: '无权限',
+      description: '仅平台管理员、组织管理员或团队负责人可更换户管',
+      color: 'error',
+      icon: 'i-lucide-shield-off'
+    })
+    return
+  }
   changeManagerId.value = detail.value?.account.manager?.id
   changeManagerReason.value = ''
   showManagerModal.value = true
@@ -244,22 +275,40 @@ async function confirmDisable() {
 }
 
 async function confirmAssign() {
-  if (!detail.value || !assignTargetTeamId.value) return
+  if (
+    !detail.value
+    || !assignTargetTeamId.value
+    || !assignTargetMemberId.value
+    || !assignManagerId.value
+    || !assignProductId.value
+  ) return
+  if (!canAllocateAccounts.value || !currentMember.value) {
+    toast.add({
+      title: '无分配权限',
+      description: '仅 PLATFORM_ADMIN / ORG_ADMIN / TEAM_MANAGER 可分配账户',
+      color: 'error',
+      icon: 'i-lucide-shield-alert'
+    })
+    return
+  }
   const account = detail.value.account
   const team = teams.find(item => item.id === assignTargetTeamId.value)
-  const member = members.find(item => item.id === assignTargetMemberId.value)
+  const targetMember = members.find(item => item.id === assignTargetMemberId.value)
   try {
     await accountService.assignDirect({
       accountIds: [account.id],
       teamId: assignTargetTeamId.value,
       memberId: assignTargetMemberId.value,
+      managerId: assignManagerId.value,
+      productId: assignProductId.value,
       reason: assignReason.value.trim() || undefined,
-      createdBy: 'mem-lisi'
+      createdBy: currentMember.value.id,
+      actorUserId: viewerUserId.value
     })
     showAssignModal.value = false
     toast.add({
       title: '分配成功',
-      description: `${account.externalAccountId} → ${team?.name ?? ''}${member ? ` / ${member.name}` : ''}`,
+      description: `${account.externalAccountId} → ${team?.name ?? ''}${targetMember ? ` / ${targetMember.name}` : ''}`,
       icon: 'i-lucide-check',
       color: 'success'
     })
@@ -304,6 +353,15 @@ async function confirmChangeProduct() {
 }
 
 async function confirmChangeManager() {
+  if (!canChangeAccountManager.value) {
+    toast.add({
+      title: '无权限',
+      description: '仅平台管理员、组织管理员或团队负责人可更换户管',
+      color: 'error',
+      icon: 'i-lucide-shield-off'
+    })
+    return
+  }
   if (!detail.value || !changeManagerId.value) return
   const account = detail.value.account
   const manager = members.find(item => item.id === changeManagerId.value)
@@ -312,7 +370,8 @@ async function confirmChangeManager() {
       accountId: account.id,
       managerMemberId: changeManagerId.value,
       reason: changeManagerReason.value.trim() || undefined,
-      createdBy: 'mem-lisi'
+      createdBy: currentMember.value?.id ?? 'unknown',
+      actorUserId: viewerUserId.value
     })
     showManagerModal.value = false
     toast.add({
@@ -449,6 +508,8 @@ const feeColumns: TableColumn<AccountServiceFeePolicyAssignment>[] = [
         <AccountsAccountDetailHeader
           :account="detail.account"
           :usage-days="detail.usageDays"
+          :can-allocate="canAllocateAccounts"
+          :can-change-manager="canChangeAccountManager"
           @assign="openAssign"
           @transfer="openTransfer"
           @recycle="openRecycle"
@@ -839,7 +900,7 @@ const feeColumns: TableColumn<AccountServiceFeePolicyAssignment>[] = [
                 placeholder="选择目标团队"
               />
             </UFormField>
-            <UFormField label="目标成员">
+            <UFormField label="目标成员" required>
               <USelectMenu
                 v-model="assignTargetMemberId"
                 :items="assignTeamMembers.map(m => ({ label: m.name, value: m.id }))"
@@ -847,6 +908,24 @@ const feeColumns: TableColumn<AccountServiceFeePolicyAssignment>[] = [
                 label-key="label"
                 placeholder="选择目标成员"
                 :disabled="!assignTargetTeamId"
+              />
+            </UFormField>
+            <UFormField label="户管" required>
+              <USelectMenu
+                v-model="assignManagerId"
+                :items="managerOptions"
+                value-key="value"
+                label-key="label"
+                placeholder="选择户管"
+              />
+            </UFormField>
+            <UFormField label="产品" required>
+              <USelectMenu
+                v-model="assignProductId"
+                :items="productOptions"
+                value-key="value"
+                label-key="label"
+                placeholder="选择产品"
               />
             </UFormField>
             <UFormField label="分配原因">
@@ -859,7 +938,7 @@ const feeColumns: TableColumn<AccountServiceFeePolicyAssignment>[] = [
               <UButton
                 label="确认分配"
                 color="primary"
-                :disabled="!assignTargetTeamId"
+                :disabled="!canConfirmAssign"
                 @click="confirmAssign"
               />
             </div>

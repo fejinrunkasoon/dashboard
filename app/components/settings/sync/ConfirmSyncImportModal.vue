@@ -70,7 +70,7 @@ function onConfirm() {
             variant="subtle"
             icon="i-lucide-info"
             title="入库 ≠ 分配"
-            description="确认后账户进入 AVAILABLE 池，不会自动 Allocate 到 Demand / Team。"
+            description="确认后账户进入可用池，不会自动分配到需求 / 团队。"
           />
 
           <p v-if="loading" class="text-sm text-muted">加载选项…</p>
@@ -85,7 +85,7 @@ function onConfirm() {
                 class="w-full"
               />
             </UFormField>
-            <UFormField label="Platform Asset（可选）">
+            <UFormField label="平台资产（可选）">
               <USelectMenu
                 v-model="platformAssetId"
                 :items="assetItems"

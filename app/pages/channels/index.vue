@@ -4,6 +4,7 @@ import type { Row } from '@tanstack/table-core'
 import type { ChannelListItem } from '~/services'
 import { channelService, mediaService } from '~/services'
 import { formatCurrency } from '~/utils'
+import { ENTITY_STATUS_LABEL, labelOf } from '~/utils/labels'
 
 useSeoMeta({ title: '渠道中心' })
 
@@ -19,9 +20,9 @@ const mediaPlatforms = await mediaService.getMediaPlatforms({ status: 'ACTIVE' }
 
 const statusOptions = [
   { label: '全部状态', value: 'all' },
-  { label: 'ACTIVE', value: 'ACTIVE' },
-  { label: 'DISABLED', value: 'DISABLED' },
-  { label: 'ARCHIVED', value: 'ARCHIVED' }
+  { label: '启用', value: 'ACTIVE' },
+  { label: '停用', value: 'DISABLED' },
+  { label: '归档', value: 'ARCHIVED' }
 ]
 
 const mediaOptions = [
@@ -149,21 +150,17 @@ const summary = computed(() => rows.value.reduce((acc, item) => {
   return acc
 }, { valid: 0, inUse: 0, abnormal: 0 }))
 
-function openChannel(id: string) {
-  void navigateTo(`/channels/${id}`)
-}
-
 const exportColumns = [
-  { key: 'code', header: 'Code' },
-  { key: 'name', header: 'Channel' },
-  { key: 'status', header: 'Status' },
-  { key: 'supportedMedia', header: 'Supported Media' },
-  { key: 'deliveredAccounts', header: 'Delivered' },
-  { key: 'currentValid', header: 'Valid' },
-  { key: 'inUse', header: 'In Use' },
-  { key: 'abnormal', header: 'Abnormal' },
-  { key: 'averageLifetimeDays', header: 'Avg Lifetime' },
-  { key: 'spend30d', header: '30D Spend' }
+  { key: 'code', header: '编码' },
+  { key: 'name', header: '渠道' },
+  { key: 'status', header: '状态' },
+  { key: 'supportedMedia', header: '支持媒体' },
+  { key: 'deliveredAccounts', header: '已交付' },
+  { key: 'currentValid', header: '有效' },
+  { key: 'inUse', header: '使用中' },
+  { key: 'abnormal', header: '异常' },
+  { key: 'averageLifetimeDays', header: '平均寿命' },
+  { key: 'spend30d', header: '30日消耗' }
 ]
 
 async function getExportRows() {
@@ -198,15 +195,15 @@ async function getExportRows() {
 }
 
 const columns: TableColumn<ChannelListItem>[] = [
-  { accessorKey: 'name', header: 'Channel' },
-  { id: 'supportedMedia', header: 'Supported Media' },
-  { accessorKey: 'deliveredAccounts', header: 'Delivered' },
-  { accessorKey: 'currentValid', header: 'Valid' },
-  { accessorKey: 'inUse', header: 'In Use' },
-  { accessorKey: 'abnormal', header: 'Abnormal' },
-  { id: 'averageLifetimeDays', header: 'Avg Lifetime' },
-  { id: 'spend30d', header: '30D Spend' },
-  { accessorKey: 'status', header: 'Status' }
+  { accessorKey: 'name', header: '渠道' },
+  { id: 'supportedMedia', header: '支持媒体' },
+  { accessorKey: 'deliveredAccounts', header: '已交付' },
+  { accessorKey: 'currentValid', header: '有效' },
+  { accessorKey: 'inUse', header: '使用中' },
+  { accessorKey: 'abnormal', header: '异常' },
+  { id: 'averageLifetimeDays', header: '平均寿命' },
+  { id: 'spend30d', header: '30日消耗' },
+  { accessorKey: 'status', header: '状态' }
 ]
 
 function cell(row: Row<ChannelListItem>): ChannelListItem {
@@ -288,14 +285,13 @@ function cell(row: Row<ChannelListItem>): ChannelListItem {
           <UTable :data="pagedRows" :columns="columns" class="shrink-0">
             <template #name-cell="{ row }">
               <div class="min-w-0">
-                <UButton
-                  :label="cell(row).name"
-                  variant="ghost"
-                  color="neutral"
-                  class="font-medium -px-2 -py-1"
-                  @click="openChannel(cell(row).id)"
-                />
-                <p class="text-xs text-muted font-mono ps-2">
+                <NuxtLink
+                  :to="`/channels/${cell(row).id}`"
+                  class="font-medium text-highlighted hover:text-primary hover:underline transition-colors"
+                >
+                  {{ cell(row).name }}
+                </NuxtLink>
+                <p class="text-xs text-muted font-mono">
                   {{ cell(row).code }}
                 </p>
               </div>
@@ -321,7 +317,7 @@ function cell(row: Row<ChannelListItem>): ChannelListItem {
               </UTooltip>
             </template>
             <template #status-cell="{ row }">
-              <UBadge :label="cell(row).status" variant="subtle" size="xs" />
+              <UBadge :label="labelOf(ENTITY_STATUS_LABEL, cell(row).status)" variant="subtle" size="xs" />
             </template>
             <template #abnormal-cell="{ row }">
               <span :class="cell(row).abnormal > 0 ? 'text-warning font-medium' : ''">

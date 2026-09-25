@@ -1,5 +1,6 @@
 import type { AppUser } from '../../domain/access'
 import {
+  accountAssignments,
   accounts,
   appUsers,
   mediaConnections,
@@ -34,6 +35,72 @@ function isTeamManager(user: AppUser): boolean {
     || teams.some(t => t.leaderMemberId === user.memberId)
 }
 
+/** Matches settings/permissions ROLE_CAPABILITIES.allocateAccount. */
+export function userCanAllocateAccounts(user: AppUser): boolean {
+  return user.roles.includes('PLATFORM_ADMIN')
+    || user.roles.includes('ORG_ADMIN')
+    || user.roles.includes('TEAM_MANAGER')
+}
+
+export function canAllocateAccountsSync(userId: string): boolean {
+  const user = findUser(userId)
+  if (!user) return false
+  return userCanAllocateAccounts(user)
+}
+
+export function assertCanAllocateAccounts(userId: string) {
+  if (!canAllocateAccountsSync(userId)) {
+    throw new Error('Only PLATFORM_ADMIN, ORG_ADMIN, or TEAM_MANAGER can allocate accounts')
+  }
+}
+
+/**
+ * Matches settings/permissions ROLE_CAPABILITIES.changeAccountManager.
+ * Reassigning 户管 is a scheduling/admin action — not TEAM_MEMBER.
+ */
+export function userCanChangeAccountManager(user: AppUser): boolean {
+  return userCanAllocateAccounts(user)
+}
+
+export function canChangeAccountManagerSync(userId: string): boolean {
+  const user = findUser(userId)
+  if (!user) return false
+  return userCanChangeAccountManager(user)
+}
+
+export function assertCanChangeAccountManager(userId: string) {
+  if (!canChangeAccountManagerSync(userId)) {
+    throw new Error('Only PLATFORM_ADMIN, ORG_ADMIN, or TEAM_MANAGER can change account manager')
+  }
+}
+
+/** Matches settings/permissions ROLE_CAPABILITIES.reviewPaymentAddress. */
+export function userCanReviewPaymentAddress(user: AppUser): boolean {
+  return user.roles.includes('PLATFORM_ADMIN')
+    || user.roles.includes('ORG_ADMIN')
+}
+
+export function canReviewPaymentAddressByMemberId(memberId: string): boolean {
+  return appUsers.some(u =>
+    u.memberId === memberId
+    && u.status === 'ACTIVE'
+    && userCanReviewPaymentAddress(u)
+  )
+}
+
+export function assertCanReviewPaymentAddressByMemberId(memberId: string) {
+  if (!canReviewPaymentAddressByMemberId(memberId)) {
+    throw new Error('Only ORG_ADMIN or PLATFORM_ADMIN can review payment addresses')
+  }
+}
+
+/**
+ * Visibility rules (aligned with team accounts tab copy):
+ * - ORG/PLATFORM admin → all org accounts
+ * - Team Manager → all accounts currently held by managed teams
+ * - Everyone → current AccountAssignment where they are the member (运营「成员」)
+ * - Everyone → active UserAccountAccess (接入 / 显式授权)
+ */
 function collectAccessibleIds(userId: string): string[] {
   const user = findUser(userId)
   if (!user) return []
@@ -56,6 +123,18 @@ function collectAccessibleIds(userId: string): string[] {
       ) {
         ids.add(link.mediaAccountId)
       }
+    }
+    for (const asg of accountAssignments) {
+      if (asg.endedAt == null && managed.includes(asg.teamId)) {
+        ids.add(asg.accountId)
+      }
+    }
+  }
+
+  // Operational assignee shown in the「成员」column
+  for (const asg of accountAssignments) {
+    if (asg.endedAt == null && asg.memberId === user.memberId) {
+      ids.add(asg.accountId)
     }
   }
 
@@ -88,19 +167,36 @@ export const accountAccessService: AccountAccessService = {
   async canManageAccount(userId, accountId) {
     const user = findUser(userId)
     if (!user) return false
-    if (user.roles.includes('ORG_ADMIN')) return true
+    if (user.roles.includes('ORG_ADMIN') || user.roles.includes('PLATFORM_ADMIN')) {
+      return true
+    }
     if (!isTeamManager(user)) return false
 
     const managed = managedTeamIds(user)
-    return teamAccountLinks.some(
+    if (teamAccountLinks.some(
       l => l.mediaAccountId === accountId
         && l.status === 'ACTIVE'
         && managed.includes(l.teamId)
+    )) {
+      return true
+    }
+    return accountAssignments.some(
+      a => a.accountId === accountId
+        && a.endedAt == null
+        && managed.includes(a.teamId)
     )
   },
 
   async canAssignAccount(userId, accountId) {
     return this.canManageAccount(userId, accountId)
+  },
+
+  async canAllocateAccounts(userId) {
+    return canAllocateAccountsSync(userId)
+  },
+
+  async canChangeAccountManager(userId) {
+    return canChangeAccountManagerSync(userId)
   },
 
   async canManageConnection(userId, connectionId) {

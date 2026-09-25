@@ -1,6 +1,8 @@
 <script setup lang="ts">
 useSeoMeta({ title: '同步运维' })
 
+const route = useRoute()
+
 const {
   jobs,
   logs,
@@ -15,6 +17,19 @@ const {
 } = useMediaSync()
 
 await refresh()
+
+async function applyJobFromQuery() {
+  const jobId = typeof route.query.jobId === 'string' ? route.query.jobId : null
+  if (!jobId) return
+  if (selectedJobId.value === jobId) return
+  await selectJob(jobId)
+}
+
+await applyJobFromQuery()
+
+watch(() => route.query.jobId, () => {
+  void applyJobFromQuery()
+})
 
 const mediaFilterItems = computed(() => [
   { label: '全部媒体', value: null as string | null },

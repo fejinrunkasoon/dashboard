@@ -16,7 +16,7 @@ const emit = defineEmits<{
 
 const columns: TableColumn<PlatformAssetType>[] = [
   { accessorKey: 'name', header: '名称' },
-  { accessorKey: 'code', header: 'Code' },
+  { accessorKey: 'code', header: '编码' },
   { accessorKey: 'status', header: '状态' },
   { id: 'actions', header: '操作' }
 ]

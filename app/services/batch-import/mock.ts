@@ -15,9 +15,9 @@ import {
 } from '../../mocks/entities'
 import { parseCsv } from '../../utils/import-table'
 import {
-  downloadBlob,
+  saveBlob,
   stampFilename,
-  toCsv,
+  toCsvBlob,
   toXlsx,
   type ExportFormat
 } from '../../utils/export-table'
@@ -368,15 +368,17 @@ export const batchImportService: BatchImportService = {
     }))
     const example = templateExampleRows()
     if (format === 'csv') {
-      downloadBlob(
+      await saveBlob(
         stampFilename('ffj-account-import-template', 'csv'),
-        new Blob([toCsv(example, columns)], { type: 'text/csv;charset=utf-8' })
+        toCsvBlob(example, columns),
+        'csv'
       )
       return
     }
-    downloadBlob(
+    await saveBlob(
       stampFilename('ffj-account-import-template', 'xlsx'),
-      toXlsx(example, columns)
+      toXlsx(example, columns),
+      'xlsx'
     )
   },
 

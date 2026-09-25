@@ -57,7 +57,7 @@ const selectedDemandOption = computed(() =>
 const quantityDescription = computed(() => {
   if (props.shortageRow) return `默认 Shortage，最多 ${props.shortageRow.shortage}`
   if (selectedDemandOption.value) {
-    return `已按 Demand 剩余量填入 ${selectedDemandOption.value.quantity}，可按询价量调整`
+    return `已按需求剩余量填入 ${selectedDemandOption.value.quantity}，可按询价量调整`
   }
   return undefined
 })
@@ -248,10 +248,10 @@ async function submit() {
             <UIcon name="i-lucide-truck" class="size-5 text-primary" />
             <div>
               <p class="font-semibold text-highlighted">
-                创建 Channel Order
+                创建渠道订单
               </p>
               <p class="text-xs text-muted">
-                池不足后补库。入库后仍需回到调度 Allocate，不会自动分配。
+                池不足后补库。入库后仍需回到调度进行分配，不会自动分配。
               </p>
             </div>
           </div>
@@ -263,9 +263,9 @@ async function submit() {
             class="rounded-md border border-default bg-elevated/50 px-3 py-2 text-xs text-muted space-y-1"
           >
             <p>
-              Demand
+              需求
               <span class="text-highlighted font-medium">{{ shortageRow.demandNo }}</span>
-              · Shortage {{ shortageRow.shortage }}
+              · 缺口 {{ shortageRow.shortage }}
             </p>
             <p>
               {{ mediaName(shortageRow.mediaId) }}
@@ -273,7 +273,7 @@ async function submit() {
             </p>
           </div>
 
-          <UFormField label="Channel" required>
+          <UFormField label="渠道" required>
             <USelectMenu
               v-model="channelId"
               :items="channelOptions"
@@ -284,7 +284,7 @@ async function submit() {
             />
           </UFormField>
 
-          <UFormField label="Media" required>
+          <UFormField label="媒体" required>
             <USelectMenu
               v-model="mediaId"
               :items="mediaOptions"
@@ -303,7 +303,7 @@ async function submit() {
             />
           </UFormField>
 
-          <UFormField label="关联 Demand Item" required description="无 Demand 不能建单">
+          <UFormField label="关联需求明细" required description="无需求不能建单">
             <USelectMenu
               v-model="demandItemId"
               :items="filteredDemandOptions"
@@ -315,7 +315,7 @@ async function submit() {
           </UFormField>
 
           <UFormField
-            label="Quantity"
+            label="数量"
             required
             :description="quantityDescription"
           >
@@ -329,9 +329,9 @@ async function submit() {
           </UFormField>
 
           <UFormField
-            label="Timezone"
+            label="时区"
             :description="selectedDemandOption?.timezone
-              ? `来自 Demand：${selectedDemandOption.timezone}`
+              ? `来自需求：${selectedDemandOption.timezone}`
               : undefined"
           >
             <USelectMenu
@@ -339,7 +339,7 @@ async function submit() {
               :items="timezoneOptions"
               value-key="value"
               label-key="label"
-              placeholder="选择 Timezone"
+              placeholder="选择时区"
               :clear="true"
               :disabled="isShortageMode || Boolean(selectedDemandOption?.timezone)"
             />
@@ -347,7 +347,7 @@ async function submit() {
 
           <UCheckbox
             v-model="asDraft"
-            label="保存为草稿（DRAFT）"
+            label="保存为草稿"
           />
         </div>
 

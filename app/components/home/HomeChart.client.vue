@@ -116,7 +116,7 @@ function yForMedia(mediaId: string) {
       <div class="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <p class="text-xs text-muted uppercase mb-1.5">
-            消耗趋势（Media Spend）
+            消耗趋势（媒体消耗）
           </p>
           <p class="text-3xl text-highlighted font-semibold">
             {{ formatNumber(total) }}

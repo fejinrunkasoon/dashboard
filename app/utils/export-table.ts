@@ -5,6 +5,15 @@ export interface ExportColumn {
 
 export type ExportFormat = 'csv' | 'xlsx'
 
+/** Rows may arrive all-at-once or as pages (preferred for large exports). */
+export type ExportRowSource =
+  | Record<string, unknown>[]
+  | AsyncIterable<Record<string, unknown>[]>
+
+const CSV_CHUNK_ROWS = 500
+/** FileSaver.js uses ~40s; keep blob URL alive until the OS finishes the download. */
+const BLOB_URL_REVOKE_MS = 40_000
+
 function cellValue(row: Record<string, unknown>, key: string): string {
   const raw = row[key]
   if (raw == null) return ''
@@ -200,32 +209,250 @@ export function toXlsx(rows: Record<string, unknown>[], columns: ExportColumn[])
   })
 }
 
-export function downloadBlob(filename: string, blob: Blob) {
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = filename
-  anchor.click()
-  URL.revokeObjectURL(url)
-}
-
 export function stampFilename(prefix: string, format: ExportFormat): string {
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
   return `${prefix}_${stamp}.${format}`
 }
 
+/** UTF-8 CSV blob with BOM. MIME is octet-stream so Windows won't auto-open Excel mid-download. */
+export function toCsvBlob(rows: Record<string, unknown>[], columns: ExportColumn[]): Blob {
+  const bytes = new TextEncoder().encode(toCsv(rows, columns))
+  return new Blob([bytes], { type: 'application/octet-stream' })
+}
+
+export function isExportAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError'
+}
+
+type ExportSink = {
+  write: (chunk: BufferSource | Blob | string) => Promise<void>
+  close: () => Promise<void>
+  abort: () => Promise<void>
+}
+
+type SaveFilePickerWindow = Window & {
+  showSaveFilePicker?: (options?: {
+    suggestedName?: string
+    types?: { description: string, accept: Record<string, string[]> }[]
+  }) => Promise<FileSystemFileHandle>
+}
+
+function pickerTypes(format: ExportFormat) {
+  if (format === 'xlsx') {
+    return [{
+      description: 'Excel 工作簿',
+      accept: {
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
+      }
+    }]
+  }
+  return [{
+    description: 'CSV',
+    accept: { 'text/csv': ['.csv'], 'application/vnd.ms-excel': ['.csv'] }
+  }]
+}
+
+/**
+ * Anchor-tag fallback (Firefox / denied picker). Uses octet-stream + long-lived
+ * object URL — same strategy as FileSaver.js — to avoid Chromium/Windows races
+ * where text/csv is handed to Excel before the file lands in Downloads.
+ */
+export function downloadBlob(filename: string, blob: Blob) {
+  const nav = window.navigator as Navigator & {
+    msSaveOrOpenBlob?: (blob: Blob, defaultName?: string) => boolean
+  }
+  if (typeof nav.msSaveOrOpenBlob === 'function') {
+    nav.msSaveOrOpenBlob(blob, filename)
+    return
+  }
+
+  const forceDownload = blob.type === 'application/octet-stream'
+    ? blob
+    : new Blob([blob], { type: 'application/octet-stream' })
+
+  const url = URL.createObjectURL(forceDownload)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  anchor.rel = 'noopener'
+  anchor.style.display = 'none'
+  document.body.appendChild(anchor)
+  anchor.dispatchEvent(new MouseEvent('click', {
+    bubbles: true,
+    cancelable: true,
+    view: window
+  }))
+  anchor.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), BLOB_URL_REVOKE_MS)
+}
+
+function createBlobSink(filename: string): ExportSink {
+  const parts: BlobPart[] = []
+  let closed = false
+
+  return {
+    async write(chunk) {
+      if (closed) throw new Error('Export sink already closed')
+      parts.push(chunk)
+    },
+    async close() {
+      if (closed) return
+      closed = true
+      downloadBlob(filename, new Blob(parts, { type: 'application/octet-stream' }))
+    },
+    async abort() {
+      closed = true
+      parts.length = 0
+    }
+  }
+}
+
+/**
+ * Open a writable export target while user activation is still valid.
+ * Prefer File System Access API (Chrome/Edge): writes straight to disk, no blob-URL race.
+ * Fall back to buffered blob download when the picker is unavailable.
+ */
+export async function openExportSink(
+  filename: string,
+  format: ExportFormat
+): Promise<ExportSink> {
+  const w = window as SaveFilePickerWindow
+  if (typeof w.showSaveFilePicker !== 'function') {
+    return createBlobSink(filename)
+  }
+
+  try {
+    const handle = await w.showSaveFilePicker({
+      suggestedName: filename,
+      types: pickerTypes(format)
+    })
+    const writable = await handle.createWritable()
+    let closed = false
+    return {
+      async write(chunk) {
+        if (closed) throw new Error('Export sink already closed')
+        await writable.write(chunk)
+      },
+      async close() {
+        if (closed) return
+        closed = true
+        await writable.close()
+      },
+      async abort() {
+        if (closed) return
+        closed = true
+        await writable.abort()
+      }
+    }
+  } catch (error) {
+    if (isExportAbortError(error)) throw error
+    // Permission denied / insecure context → soft-fallback to blob download
+    return createBlobSink(filename)
+  }
+}
+
+async function* iterateRowPages(source: ExportRowSource): AsyncGenerator<Record<string, unknown>[]> {
+  if (Array.isArray(source)) {
+    if (source.length) yield source
+    return
+  }
+  for await (const page of source) {
+    if (page.length) yield page
+  }
+}
+
+function csvLine(row: Record<string, unknown>, columns: ExportColumn[]): string {
+  return columns.map(col => escapeCsv(cellValue(row, col.key))).join(',')
+}
+
+/** Stream CSV (BOM + header + row pages) without building one giant string. */
+export async function writeCsvToSink(
+  sink: ExportSink,
+  source: ExportRowSource,
+  columns: ExportColumn[]
+): Promise<number> {
+  const encoder = new TextEncoder()
+  const header = columns.map(col => escapeCsv(col.header)).join(',')
+  await sink.write(encoder.encode(`\uFEFF${header}\n`))
+
+  let total = 0
+  let pending: Record<string, unknown>[] = []
+
+  const flush = async () => {
+    if (!pending.length) return
+    const body = pending.map(row => csvLine(row, columns)).join('\n')
+    await sink.write(encoder.encode(`${body}\n`))
+    total += pending.length
+    pending = []
+  }
+
+  for await (const page of iterateRowPages(source)) {
+    for (const row of page) {
+      pending.push(row)
+      if (pending.length >= CSV_CHUNK_ROWS) await flush()
+    }
+  }
+  await flush()
+  return total
+}
+
+export async function writeXlsxToSink(
+  sink: ExportSink,
+  source: ExportRowSource,
+  columns: ExportColumn[]
+): Promise<number> {
+  const rows: Record<string, unknown>[] = []
+  for await (const page of iterateRowPages(source)) {
+    rows.push(...page)
+  }
+  await sink.write(toXlsx(rows, columns))
+  return rows.length
+}
+
+/**
+ * Full export pipeline. Call `openExportSink` first (from the click handler)
+ * when you need to fetch data asynchronously and still keep the save-picker gesture.
+ */
+export async function writeExportToSink(
+  sink: ExportSink,
+  source: ExportRowSource,
+  columns: ExportColumn[],
+  format: ExportFormat
+): Promise<number> {
+  if (format === 'csv') return writeCsvToSink(sink, source, columns)
+  return writeXlsxToSink(sink, source, columns)
+}
+
 export async function exportTable(
-  rows: Record<string, unknown>[],
+  rows: ExportRowSource,
   columns: ExportColumn[],
   prefix: string,
   format: ExportFormat
-) {
-  if (format === 'csv') {
-    downloadBlob(
-      stampFilename(prefix, 'csv'),
-      new Blob([toCsv(rows, columns)], { type: 'text/csv;charset=utf-8' })
-    )
-    return
+): Promise<number> {
+  const filename = stampFilename(prefix, format)
+  const sink = await openExportSink(filename, format)
+  try {
+    const count = await writeExportToSink(sink, rows, columns, format)
+    if (!count) {
+      await sink.abort()
+      return 0
+    }
+    await sink.close()
+    return count
+  } catch (error) {
+    await sink.abort().catch(() => {})
+    throw error
   }
-  downloadBlob(stampFilename(prefix, 'xlsx'), toXlsx(rows, columns))
+}
+
+/** Convenience for templates / small blobs that already exist. */
+export async function saveBlob(filename: string, blob: Blob, format: ExportFormat): Promise<void> {
+  const sink = await openExportSink(filename, format)
+  try {
+    await sink.write(blob)
+    await sink.close()
+  } catch (error) {
+    await sink.abort().catch(() => {})
+    throw error
+  }
 }

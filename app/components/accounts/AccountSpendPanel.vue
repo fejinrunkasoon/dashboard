@@ -78,7 +78,7 @@ async function saveSpendLimit() {
       spendLimit: draftLimit.value != null && draftLimit.value > 0 ? draftLimit.value : null,
       createdBy: member.value.id
     })
-    toast.add({ title: 'Spend Limit 已更新', icon: 'i-lucide-check', color: 'success' })
+    toast.add({ title: '消耗上限已更新', icon: 'i-lucide-check', color: 'success' })
     emit('refreshed')
     await refresh()
   } catch (error) {
@@ -154,7 +154,7 @@ async function saveSpendLimit() {
 
     <div class="rounded-lg border border-default p-3 space-y-2">
       <p class="text-xs font-medium text-highlighted">
-        设置最高额度（Spend Limit）
+        设置最高额度（消耗上限）
       </p>
       <div class="flex flex-wrap items-end gap-2">
         <UFormField label="金额" class="min-w-40">

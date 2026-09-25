@@ -42,18 +42,10 @@ const items = computed<DropdownMenuItem[][]>(() => ([[{
     }
   }))
 }], [{
-  label: '平台连接',
-  icon: 'i-lucide-link',
-  to: '/accounts/connections'
-}, {
-  label: '系统设置',
-  icon: 'i-lucide-settings',
-  to: '/settings'
-}], [{
   label: '主题',
   icon: 'i-lucide-palette',
   children: [{
-    label: 'Primary',
+    label: '主色',
     slot: 'chip',
     chip: appConfig.ui.colors.primary,
     content: {
@@ -72,7 +64,7 @@ const items = computed<DropdownMenuItem[][]>(() => ([[{
       }
     }))
   }, {
-    label: 'Neutral',
+    label: '中性色',
     slot: 'chip',
     chip: appConfig.ui.colors.neutral === 'neutral' ? 'old-neutral' : appConfig.ui.colors.neutral,
     content: {

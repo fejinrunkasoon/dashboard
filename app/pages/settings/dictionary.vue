@@ -66,7 +66,7 @@ const kindItems = (Object.keys(DICTIONARY_KIND_LABELS) as DictionaryEnumKind[]).
 
 const enumColumns: TableColumn<DictionaryEnumItem>[] = [
   { accessorKey: 'label', header: '名称' },
-  { accessorKey: 'code', header: 'Code' },
+  { accessorKey: 'code', header: '编码' },
   { accessorKey: 'status', header: '状态' },
   { id: 'actions', header: '操作' }
 ]
@@ -74,7 +74,7 @@ const enumColumns: TableColumn<DictionaryEnumItem>[] = [
 const assetColumns: TableColumn<PlatformAssetListItem>[] = [
   { accessorKey: 'mediaName', header: '媒体' },
   { accessorKey: 'typeName', header: '类型' },
-  { accessorKey: 'externalId', header: 'External ID' },
+  { accessorKey: 'externalId', header: '外部 ID' },
   { accessorKey: 'name', header: '名称' },
   { accessorKey: 'channelName', header: '来源渠道' },
   { accessorKey: 'status', header: '状态' },

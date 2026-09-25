@@ -3,7 +3,14 @@ import type { TableColumn } from '@nuxt/ui'
 import type { Row } from '@tanstack/table-core'
 import type { Alert, AlertQuery, AlertSeverity, AlertStatus } from '~/domain'
 import { isShortageAlertType } from '~/domain'
-import { alertService } from '~/services'
+import { alertService, demandService } from '~/services'
+import {
+  ALERT_TYPE_LABEL,
+  ALERT_SEVERITY_LABEL,
+  ALERT_STATUS_LABEL,
+  ALERT_ENTITY_TYPE_LABEL,
+  labelOf
+} from '~/utils/labels'
 
 useSeoMeta({ title: '预警与待办' })
 
@@ -15,31 +22,31 @@ const ASSIGNEE = 'mem-lisi'
 
 const typeFilterOptions = [
   { label: '全部类型', value: 'all' },
-  { label: 'TEAM_ACCOUNT_SHORTAGE', value: 'TEAM_ACCOUNT_SHORTAGE' },
-  { label: 'POOL_SHORTAGE', value: 'POOL_SHORTAGE' },
-  { label: 'ACCOUNT_BANNED', value: 'ACCOUNT_BANNED' },
-  { label: 'NO_SPEND_48H', value: 'NO_SPEND_48H' },
-  { label: 'DEMAND_OVERDUE', value: 'DEMAND_OVERDUE' },
-  { label: 'API_ACCESS_LOST', value: 'API_ACCESS_LOST' },
-  { label: 'SYNC_FAILED', value: 'SYNC_FAILED' },
-  { label: 'CREDENTIAL_EXPIRED', value: 'CREDENTIAL_EXPIRED' },
-  { label: 'RECONCILIATION_VARIANCE', value: 'RECONCILIATION_VARIANCE' },
-  { label: 'CHANNEL_BALANCE_LOW', value: 'CHANNEL_BALANCE_LOW' }
+  { label: '团队账户缺口', value: 'TEAM_ACCOUNT_SHORTAGE' },
+  { label: '账户池缺口', value: 'POOL_SHORTAGE' },
+  { label: '账户封禁', value: 'ACCOUNT_BANNED' },
+  { label: '48小时无消耗', value: 'NO_SPEND_48H' },
+  { label: '需求逾期', value: 'DEMAND_OVERDUE' },
+  { label: 'API访问失效', value: 'API_ACCESS_LOST' },
+  { label: '同步失败', value: 'SYNC_FAILED' },
+  { label: '凭据过期', value: 'CREDENTIAL_EXPIRED' },
+  { label: '对账差异', value: 'RECONCILIATION_VARIANCE' },
+  { label: '渠道余额不足', value: 'CHANNEL_BALANCE_LOW' }
 ]
 
 const severityFilterOptions = [
   { label: '全部级别', value: 'all' },
-  { label: 'URGENT', value: 'URGENT' },
-  { label: 'WARNING', value: 'WARNING' },
-  { label: 'INFO', value: 'INFO' }
+  { label: '紧急', value: 'URGENT' },
+  { label: '警告', value: 'WARNING' },
+  { label: '信息', value: 'INFO' }
 ]
 
 const statusFilterOptions = [
   { label: '全部状态', value: 'all' },
-  { label: 'OPEN', value: 'OPEN' },
-  { label: 'IN_PROGRESS', value: 'IN_PROGRESS' },
-  { label: 'RESOLVED', value: 'RESOLVED' },
-  { label: 'IGNORED', value: 'IGNORED' }
+  { label: '待处理', value: 'OPEN' },
+  { label: '处理中', value: 'IN_PROGRESS' },
+  { label: '已解决', value: 'RESOLVED' },
+  { label: '已忽略', value: 'IGNORED' }
 ]
 
 const assignedOptions = [
@@ -50,10 +57,11 @@ const assignedOptions = [
 
 const entityTypeOptions = [
   { label: '全部实体', value: 'all' },
-  { label: 'AdAccount', value: 'AdAccount' },
-  { label: 'AccountDemand', value: 'AccountDemand' },
-  { label: 'Team', value: 'Team' },
-  { label: 'Channel', value: 'Channel' }
+  { label: '广告账户', value: 'AdAccount' },
+  { label: '账户需求', value: 'AccountDemand' },
+  { label: '团队', value: 'Team' },
+  { label: '渠道', value: 'Channel' },
+  { label: '同步任务', value: 'SyncJob' }
 ]
 
 function asArray(value: unknown): string[] {
@@ -212,12 +220,13 @@ const activeChips = computed(() => {
   return chips
 })
 
+const { openAlertCount, refreshOpenAlertCount } = useDashboard()
+
 const pending = ref(true)
 const errorMessage = ref<string | null>(null)
 const rows = ref<Alert[]>([])
 const total = ref(0)
 const totalPages = ref(1)
-const openCount = ref(0)
 
 const selectedAlert = ref<Alert | null>(null)
 const showDetail = ref(false)
@@ -228,14 +237,13 @@ async function loadAlerts() {
   pending.value = true
   errorMessage.value = null
   try {
-    const [result, count] = await Promise.all([
+    const [result] = await Promise.all([
       alertService.getAlerts({ ...query.value }),
-      alertService.getOpenCount()
+      refreshOpenAlertCount()
     ])
     rows.value = result.data
     total.value = result.pagination.total
     totalPages.value = result.pagination.totalPages
-    openCount.value = count
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '加载预警失败'
     rows.value = []
@@ -311,10 +319,45 @@ function goCreateOrder(alert: Alert) {
   })
 }
 
+async function goRelatedOrder(orderId: string) {
+  const page = await demandService.getChannelAccountOrders({ page: 1, pageSize: 200 })
+  const order = page.data.find(item => item.id === orderId)
+  if (!order) {
+    toast.add({
+      title: '订单未找到',
+      description: orderId,
+      color: 'warning',
+      icon: 'i-lucide-alert-circle'
+    })
+    return
+  }
+  void navigateTo({
+    path: `/channels/${order.channelId}`,
+    query: { tab: 'orders' }
+  })
+}
+
 function entityLink(alert: Alert): string | null {
   if (alert.entityType === 'AdAccount') return `/accounts/${alert.entityId}`
   if (alert.entityType === 'Team') return `/teams/${alert.entityId}`
-  if (alert.entityType === 'AccountDemand') return '/accounts/scheduling'
+  if (alert.entityType === 'Channel') return `/channels/${alert.entityId}`
+  if (alert.entityType === 'SyncJob') {
+    return `/settings/sync?jobId=${encodeURIComponent(alert.entityId)}`
+  }
+  if (alert.entityType === 'AccountDemand') {
+    if (alert.relatedDemandItemId) {
+      return `/accounts/scheduling?demandItemId=${encodeURIComponent(alert.relatedDemandItemId)}`
+    }
+    return '/accounts/scheduling'
+  }
+  return null
+}
+
+function relatedDemandLink(alert: Alert): string | null {
+  if (alert.relatedDemandItemId) {
+    return `/accounts/scheduling?demandItemId=${encodeURIComponent(alert.relatedDemandItemId)}`
+  }
+  if (alert.relatedDemandId) return '/accounts/scheduling'
   return null
 }
 
@@ -332,14 +375,14 @@ const statusColor = (status: AlertStatus) => {
 }
 
 const columns: TableColumn<Alert>[] = [
-  { accessorKey: 'type', header: 'Type' },
-  { accessorKey: 'severity', header: 'Severity' },
-  { accessorKey: 'title', header: 'Title' },
-  { accessorKey: 'entityType', header: 'Entity' },
-  { accessorKey: 'status', header: 'Status' },
-  { id: 'assignee', header: 'Assignee' },
-  { id: 'detectedAt', header: 'Detected' },
-  { id: 'actions', header: 'Actions' }
+  { accessorKey: 'type', header: '类型' },
+  { accessorKey: 'severity', header: '级别' },
+  { accessorKey: 'title', header: '标题' },
+  { accessorKey: 'entityType', header: '实体' },
+  { accessorKey: 'status', header: '状态' },
+  { id: 'assignee', header: '处理人' },
+  { id: 'detectedAt', header: '发现时间' },
+  { id: 'actions', header: '操作' }
 ]
 
 function cell(row: Row<Alert>): Alert {
@@ -347,14 +390,14 @@ function cell(row: Row<Alert>): Alert {
 }
 
 const exportColumns = [
-  { key: 'type', header: 'Type' },
-  { key: 'severity', header: 'Severity' },
-  { key: 'title', header: 'Title' },
-  { key: 'entityType', header: 'Entity' },
-  { key: 'entityId', header: 'Entity ID' },
-  { key: 'status', header: 'Status' },
-  { key: 'assigneeUserId', header: 'Assignee' },
-  { key: 'detectedAt', header: 'Detected' }
+  { key: 'type', header: '类型' },
+  { key: 'severity', header: '级别' },
+  { key: 'title', header: '标题' },
+  { key: 'entityType', header: '实体' },
+  { key: 'entityId', header: '实体 ID' },
+  { key: 'status', header: '状态' },
+  { key: 'assigneeUserId', header: '处理人' },
+  { key: 'detectedAt', header: '发现时间' }
 ]
 
 async function getExportRows() {
@@ -387,7 +430,7 @@ const hasActiveFilters = computed(() => activeChips.value.length > 0)
         </template>
         <template #right>
           <UBadge
-            :label="`待处理 ${openCount}`"
+            :label="`待处理 ${openAlertCount}`"
             variant="subtle"
             color="warning"
           />
@@ -460,11 +503,11 @@ const hasActiveFilters = computed(() => activeChips.value.length > 0)
         <template v-else>
           <UTable :data="rows" :columns="columns" class="shrink-0">
             <template #type-cell="{ row }">
-              <span class="font-mono text-xs">{{ cell(row).type }}</span>
+              <span class="text-xs">{{ labelOf(ALERT_TYPE_LABEL, cell(row).type) }}</span>
             </template>
             <template #severity-cell="{ row }">
               <UBadge
-                :label="cell(row).severity"
+                :label="labelOf(ALERT_SEVERITY_LABEL, cell(row).severity)"
                 variant="subtle"
                 :color="severityColor(cell(row).severity)"
                 size="xs"
@@ -485,11 +528,21 @@ const hasActiveFilters = computed(() => activeChips.value.length > 0)
               </div>
             </template>
             <template #entityType-cell="{ row }">
-              <span class="text-xs">{{ cell(row).entityType }} / {{ cell(row).entityId }}</span>
+              <NuxtLink
+                v-if="entityLink(cell(row))"
+                :to="entityLink(cell(row))!"
+                class="text-xs text-primary hover:underline"
+                @click.stop
+              >
+                {{ labelOf(ALERT_ENTITY_TYPE_LABEL, cell(row).entityType) }} / {{ cell(row).entityId }}
+              </NuxtLink>
+              <span v-else class="text-xs">
+                {{ labelOf(ALERT_ENTITY_TYPE_LABEL, cell(row).entityType) }} / {{ cell(row).entityId }}
+              </span>
             </template>
             <template #status-cell="{ row }">
               <UBadge
-                :label="cell(row).status"
+                :label="labelOf(ALERT_STATUS_LABEL, cell(row).status)"
                 variant="subtle"
                 :color="statusColor(cell(row).status)"
                 size="xs"
@@ -547,11 +600,11 @@ const hasActiveFilters = computed(() => activeChips.value.length > 0)
                   {{ selectedAlert.title }}
                 </h3>
                 <p class="text-xs text-muted font-mono mt-1">
-                  {{ selectedAlert.type }} · {{ selectedAlert.id }}
+                  {{ labelOf(ALERT_TYPE_LABEL, selectedAlert.type) }} · {{ selectedAlert.id }}
                 </p>
               </div>
               <UBadge
-                :label="selectedAlert.status"
+                :label="labelOf(ALERT_STATUS_LABEL, selectedAlert.status)"
                 variant="subtle"
                 :color="statusColor(selectedAlert.status)"
                 size="xs"
@@ -564,45 +617,76 @@ const hasActiveFilters = computed(() => activeChips.value.length > 0)
 
             <dl class="grid grid-cols-2 gap-2 text-xs">
               <div>
-                <dt class="text-muted">Severity</dt>
-                <dd>{{ selectedAlert.severity }}</dd>
+                <dt class="text-muted">级别</dt>
+                <dd>{{ labelOf(ALERT_SEVERITY_LABEL, selectedAlert.severity) }}</dd>
               </div>
               <div>
-                <dt class="text-muted">Assignee</dt>
+                <dt class="text-muted">处理人</dt>
                 <dd>{{ selectedAlert.assigneeUserId ?? '—' }}</dd>
               </div>
               <div>
-                <dt class="text-muted">Entity</dt>
+                <dt class="text-muted">实体</dt>
                 <dd>
                   <NuxtLink
                     v-if="entityLink(selectedAlert)"
                     :to="entityLink(selectedAlert)!"
                     class="text-primary"
                   >
-                    {{ selectedAlert.entityType }} / {{ selectedAlert.entityId }}
+                    {{ labelOf(ALERT_ENTITY_TYPE_LABEL, selectedAlert.entityType) }} / {{ selectedAlert.entityId }}
                   </NuxtLink>
-                  <span v-else>{{ selectedAlert.entityType }} / {{ selectedAlert.entityId }}</span>
+                  <span v-else>{{ labelOf(ALERT_ENTITY_TYPE_LABEL, selectedAlert.entityType) }} / {{ selectedAlert.entityId }}</span>
                 </dd>
               </div>
               <div>
-                <dt class="text-muted">Detected</dt>
+                <dt class="text-muted">发现时间</dt>
                 <dd>{{ selectedAlert.detectedAt }}</dd>
               </div>
               <div v-if="selectedAlert.relatedDemandId">
-                <dt class="text-muted">Demand</dt>
-                <dd class="font-mono">{{ selectedAlert.relatedDemandId }}</dd>
+                <dt class="text-muted">需求</dt>
+                <dd>
+                  <NuxtLink
+                    v-if="relatedDemandLink(selectedAlert)"
+                    :to="relatedDemandLink(selectedAlert)!"
+                    class="font-mono text-primary"
+                  >
+                    {{ selectedAlert.relatedDemandId }}
+                  </NuxtLink>
+                  <span v-else class="font-mono">{{ selectedAlert.relatedDemandId }}</span>
+                </dd>
               </div>
               <div v-if="selectedAlert.relatedDemandItemId">
-                <dt class="text-muted">Demand Item</dt>
-                <dd class="font-mono">{{ selectedAlert.relatedDemandItemId }}</dd>
+                <dt class="text-muted">需求明细</dt>
+                <dd>
+                  <NuxtLink
+                    :to="`/accounts/scheduling?demandItemId=${encodeURIComponent(selectedAlert.relatedDemandItemId)}`"
+                    class="font-mono text-primary"
+                  >
+                    {{ selectedAlert.relatedDemandItemId }}
+                  </NuxtLink>
+                </dd>
               </div>
               <div v-if="selectedAlert.relatedChannelOrderId">
-                <dt class="text-muted">Channel Order</dt>
-                <dd class="font-mono">{{ selectedAlert.relatedChannelOrderId }}</dd>
+                <dt class="text-muted">渠道订单</dt>
+                <dd>
+                  <button
+                    type="button"
+                    class="font-mono text-primary hover:underline"
+                    @click="goRelatedOrder(selectedAlert.relatedChannelOrderId)"
+                  >
+                    {{ selectedAlert.relatedChannelOrderId }}
+                  </button>
+                </dd>
               </div>
               <div v-if="selectedAlert.relatedTeamId">
-                <dt class="text-muted">Team</dt>
-                <dd class="font-mono">{{ selectedAlert.relatedTeamId }}</dd>
+                <dt class="text-muted">团队</dt>
+                <dd>
+                  <NuxtLink
+                    :to="`/teams/${selectedAlert.relatedTeamId}`"
+                    class="font-mono text-primary"
+                  >
+                    {{ selectedAlert.relatedTeamId }}
+                  </NuxtLink>
+                </dd>
               </div>
             </dl>
 
@@ -660,7 +744,7 @@ const hasActiveFilters = computed(() => activeChips.value.length > 0)
                   @click="goAllocate(selectedAlert)"
                 />
                 <UButton
-                  label="创建 Channel Order"
+                  label="创建渠道订单"
                   size="xs"
                   color="neutral"
                   variant="outline"

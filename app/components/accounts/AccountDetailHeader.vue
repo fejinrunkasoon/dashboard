@@ -5,6 +5,8 @@ import { formatCurrency } from '~/utils'
 const props = defineProps<{
   account: AdAccountListItem
   usageDays: number | null
+  canAllocate?: boolean
+  canChangeManager?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -89,7 +91,7 @@ function moneyOrDash(value: number | null | undefined): string {
 
       <div class="flex items-center gap-2 flex-wrap justify-end">
         <UButton
-          v-if="isPoolEligible"
+          v-if="isPoolEligible && canAllocate !== false"
           label="分配"
           icon="i-lucide-user-plus"
           color="primary"
@@ -125,6 +127,7 @@ function moneyOrDash(value: number | null | undefined): string {
           @click="emit('changeProduct')"
         />
         <UButton
+          v-if="canChangeManager !== false"
           label="更换户管"
           icon="i-lucide-user-cog"
           color="neutral"
@@ -259,7 +262,7 @@ function moneyOrDash(value: number | null | undefined): string {
       </div>
       <div class="rounded-lg border border-default p-3">
         <p class="text-xs text-muted mb-1">
-          Spend Limit
+          消耗上限
         </p>
         <p class="font-mono text-sm">
           {{ moneyOrDash(account.spendLimit) }}

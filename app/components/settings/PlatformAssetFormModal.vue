@@ -115,7 +115,7 @@ async function onSubmit() {
               {{ isEdit ? '编辑媒体资产' : '登记媒体资产' }}
             </span>
             <p class="text-xs text-muted">
-              登记 BM / MCC / BC / Org 等实例。媒体、类型与 External ID 创建后不可改。
+              登记 BM / MCC / BC / Org 等实例。媒体、类型与外部 ID 创建后不可改。
             </p>
           </div>
         </template>
@@ -139,7 +139,7 @@ async function onSubmit() {
               class="w-full"
             />
           </UFormField>
-          <UFormField label="External ID" required>
+          <UFormField label="外部 ID" required>
             <UInput
               v-model="externalId"
               :disabled="isEdit"

@@ -3,7 +3,7 @@ import { formatTimeAgo } from '@vueuse/core'
 import type { Alert } from '~/domain'
 import { alertService } from '~/services'
 
-const { isNotificationsSlideoverOpen } = useDashboard()
+const { isNotificationsSlideoverOpen, refreshOpenAlertCount } = useDashboard()
 
 const alerts = ref<Alert[]>([])
 const pending = ref(true)
@@ -11,11 +11,14 @@ const pending = ref(true)
 async function load() {
   pending.value = true
   try {
-    const result = await alertService.getAlerts({
-      statuses: ['OPEN', 'IN_PROGRESS'],
-      page: 1,
-      pageSize: 20
-    })
+    const [result] = await Promise.all([
+      alertService.getAlerts({
+        statuses: ['OPEN', 'IN_PROGRESS'],
+        page: 1,
+        pageSize: 20
+      }),
+      refreshOpenAlertCount()
+    ])
     alerts.value = result.data
   } finally {
     pending.value = false

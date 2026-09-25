@@ -24,60 +24,106 @@ const selectedRoles = ref<AppRole[]>(['TEAM_MEMBER'])
 
 const APP_ROLE_META: Record<AppRole, { label: string, description: string }> = {
   PLATFORM_ADMIN: {
-    label: 'Platform Admin',
-    description: '平台级管理，可开通媒体 App 与系统配置'
+    label: '平台管理员',
+    description: '平台级全权：组织全部账户、分配、更换户管、审批打款、系统配置'
   },
   ORG_ADMIN: {
-    label: 'Org Admin',
-    description: '组织管理员，可见本组织全部账户与连接'
+    label: '组织管理员',
+    description: '组织内全权：全部账户可见、分配、更换户管、审批打款、系统配置'
   },
   TEAM_MANAGER: {
-    label: 'Team Manager',
-    description: '团队负责人，管理本团队账户分配与连接'
+    label: '团队负责人',
+    description: '本团队范围：可分配账户、更换户管、管理连接；不可审批打款、不可管系统'
   },
   TEAM_MEMBER: {
-    label: 'Team Member',
-    description: '普通成员，按分配可见账户'
+    label: '团队成员',
+    description: '普通成员：仅可见分配/授权账户；不可分配、不可更换户管、不可审批打款'
   }
 }
 
 type CapabilityKey =
+  | 'viewOrgAccounts'
+  | 'viewTeamAccounts'
+  | 'viewAssignedAccounts'
+  | 'allocateAccount'
+  | 'changeAccountManager'
+  | 'manageConnection'
+  | 'createDemand'
   | 'viewChannelFunds'
   | 'createPayment'
-  | 'allocateAccount'
+  | 'reviewPaymentAddress'
   | 'manageSystem'
 
-const capabilityLabels: { key: CapabilityKey, label: string }[] = [
+const capabilityLabels: { key: CapabilityKey, label: string, hint?: string }[] = [
+  { key: 'viewOrgAccounts', label: '查看组织全部账户' },
+  { key: 'viewTeamAccounts', label: '查看本团队账户' },
+  { key: 'viewAssignedAccounts', label: '查看分配/授权给自己的账户' },
+  { key: 'allocateAccount', label: '分配账户（池 / Demand）' },
+  { key: 'changeAccountManager', label: '更换户管', hint: '已强制鉴权' },
+  { key: 'manageConnection', label: '管理平台连接' },
+  { key: 'createDemand', label: '创建账户需求' },
   { key: 'viewChannelFunds', label: '查看渠道资金' },
   { key: 'createPayment', label: '创建打款' },
-  { key: 'allocateAccount', label: '分配账户' },
-  { key: 'manageSystem', label: '管理系统' }
+  { key: 'reviewPaymentAddress', label: '审批/驳回打款地址' },
+  { key: 'manageSystem', label: '管理系统（设置 / 字典 / 规则）' }
 ]
 
-/** Read-only capability guide mapped from AppRole — not an editable ACL engine. */
+/**
+ * Read-only capability guide mapped from AppRole.
+ * Enforced today: allocateAccount, changeAccountManager, reviewPaymentAddress,
+ * account visibility (via AccountAccessService), manageConnection.
+ */
 const ROLE_CAPABILITIES: Record<AppRole, Record<CapabilityKey, boolean>> = {
   PLATFORM_ADMIN: {
+    viewOrgAccounts: true,
+    viewTeamAccounts: true,
+    viewAssignedAccounts: true,
+    allocateAccount: true,
+    changeAccountManager: true,
+    manageConnection: true,
+    createDemand: true,
     viewChannelFunds: true,
     createPayment: true,
-    allocateAccount: true,
+    reviewPaymentAddress: true,
     manageSystem: true
   },
   ORG_ADMIN: {
+    viewOrgAccounts: true,
+    viewTeamAccounts: true,
+    viewAssignedAccounts: true,
+    allocateAccount: true,
+    changeAccountManager: true,
+    manageConnection: true,
+    createDemand: true,
     viewChannelFunds: true,
     createPayment: true,
-    allocateAccount: true,
+    reviewPaymentAddress: true,
     manageSystem: true
   },
   TEAM_MANAGER: {
+    viewOrgAccounts: false,
+    viewTeamAccounts: true,
+    viewAssignedAccounts: true,
+    allocateAccount: true,
+    changeAccountManager: true,
+    manageConnection: true,
+    createDemand: true,
     viewChannelFunds: false,
     createPayment: false,
-    allocateAccount: true,
+    reviewPaymentAddress: false,
     manageSystem: false
   },
   TEAM_MEMBER: {
+    viewOrgAccounts: false,
+    viewTeamAccounts: false,
+    viewAssignedAccounts: true,
+    allocateAccount: false,
+    changeAccountManager: false,
+    manageConnection: false,
+    createDemand: true,
     viewChannelFunds: false,
     createPayment: false,
-    allocateAccount: false,
+    reviewPaymentAddress: false,
     manageSystem: false
   }
 }
@@ -95,13 +141,26 @@ const matrixRows = computed(() =>
   capabilityLabels.map(item => ({
     key: item.key,
     label: item.label,
+    hint: item.hint,
     enabled: selectedRoleGuide.value[item.key]
   }))
 )
 
-const matrixColumns: TableColumn<{ key: CapabilityKey, label: string, enabled: boolean }>[] = [
-  { accessorKey: 'label', header: '能力（说明）' },
-  { id: 'enabled', header: '典型允许' }
+const allowedCapabilities = computed(() =>
+  capabilityLabels.filter(item => selectedRoleGuide.value[item.key])
+)
+const deniedCapabilities = computed(() =>
+  capabilityLabels.filter(item => !selectedRoleGuide.value[item.key])
+)
+
+const matrixColumns: TableColumn<{
+  key: CapabilityKey
+  label: string
+  hint?: string
+  enabled: boolean
+}>[] = [
+  { accessorKey: 'label', header: '能力' },
+  { id: 'enabled', header: '允许' }
 ]
 
 const userColumns: TableColumn<AppUserListItem>[] = [
@@ -251,7 +310,7 @@ function statusColor(status: string) {
   <div class="space-y-6">
     <UPageCard
       title="用户与权限"
-      description="管理 AppUser 与 AppRole（Mock）。能力矩阵为说明文档，不接真实鉴权引擎。切换会话请用右上角用户菜单。"
+      description="管理 AppUser 与 AppRole（Mock）。能力矩阵与当前鉴权对齐：账户可见性、分配、更换户管、审批打款、连接管理已按角色强制。切换会话请用右上角用户菜单。"
       variant="naked"
       orientation="horizontal"
       class="mb-2"
@@ -287,8 +346,57 @@ function statusColor(status: string) {
         <h3 class="text-sm font-semibold text-highlighted">
           {{ APP_ROLE_META[selectedRoleId].label }} · 能力说明（只读）
         </h3>
+        <p class="text-xs text-muted">
+          {{ APP_ROLE_META[selectedRoleId].description }}
+        </p>
+        <div class="grid gap-2 sm:grid-cols-2">
+          <div class="rounded-lg border border-default p-3 space-y-1.5">
+            <p class="text-xs font-medium text-success">
+              可以
+            </p>
+            <ul class="space-y-1">
+              <li
+                v-for="item in allowedCapabilities"
+                :key="item.key"
+                class="text-xs text-highlighted flex items-start gap-1.5"
+              >
+                <UIcon name="i-lucide-check" class="size-3.5 mt-0.5 shrink-0 text-success" />
+                <span>{{ item.label }}</span>
+              </li>
+            </ul>
+            <p v-if="!allowedCapabilities.length" class="text-xs text-muted">
+              —
+            </p>
+          </div>
+          <div class="rounded-lg border border-default p-3 space-y-1.5">
+            <p class="text-xs font-medium text-muted">
+              不可以
+            </p>
+            <ul class="space-y-1">
+              <li
+                v-for="item in deniedCapabilities"
+                :key="item.key"
+                class="text-xs text-muted flex items-start gap-1.5"
+              >
+                <UIcon name="i-lucide-x" class="size-3.5 mt-0.5 shrink-0" />
+                <span>{{ item.label }}</span>
+              </li>
+            </ul>
+            <p v-if="!deniedCapabilities.length" class="text-xs text-muted">
+              —
+            </p>
+          </div>
+        </div>
         <div class="overflow-x-auto rounded-lg border border-default">
           <UTable :data="matrixRows" :columns="matrixColumns" class="shrink-0">
+            <template #label-cell="{ row }">
+              <div class="flex flex-col gap-0.5">
+                <span class="text-sm">{{ row.original.label }}</span>
+                <span v-if="row.original.hint" class="text-[10px] text-muted">
+                  {{ row.original.hint }}
+                </span>
+              </div>
+            </template>
             <template #enabled-cell="{ row }">
               <UBadge
                 :label="row.original.enabled ? '是' : '否'"

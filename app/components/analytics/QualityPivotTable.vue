@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
 import type { Row } from '@tanstack/table-core'
-import type { AccountAssetStatus } from '~/domain'
 import type { QualityGroupBy, QualityPivotRow } from '~/services'
 import { formatCurrency } from '~/utils'
+import { navigateQualityDrilldown } from '~/utils/quality-drilldown'
 
 const props = withDefaults(defineProps<{
   rows: QualityPivotRow[]
@@ -26,58 +26,22 @@ function formatRate(value: number): string {
   return `${(value * 100).toFixed(1)}%`
 }
 
-function drilldownQuery(row: QualityPivotRow): Record<string, string | string[]> | null {
-  if (!row.drillable) return null
-
-  const query: Record<string, string | string[]> = { ...props.lockedQuery }
-
-  switch (props.groupBy) {
-    case 'media':
-      query.mediaIds = row.key
-      break
-    case 'channel':
-      query.channelIds = row.key
-      break
-    case 'timezone':
-      query.timezone = row.key
-      break
-    case 'team':
-      query.teamIds = row.key
-      break
-    case 'member':
-      query.memberIds = row.key
-      break
-    case 'manager':
-      query.managerIds = row.key
-      break
-    case 'product':
-      query.productIds = row.key
-      break
-    case 'assetStatus':
-      query.assetStatuses = row.key as AccountAssetStatus
-      break
-  }
-
-  return query
-}
-
 function viewAccounts(row: QualityPivotRow) {
-  const query = drilldownQuery(row)
-  if (!query) return
+  if (!row.drillable) return
   emit('drilldown', row)
-  void navigateTo({ path: '/accounts', query })
+  void navigateQualityDrilldown(props.groupBy, row, props.lockedQuery)
 }
 
 const columns = computed<TableColumn<QualityPivotRow>[]>(() => [
   { accessorKey: 'label', header: props.dimensionHeader },
-  { accessorKey: 'accountCount', header: 'Accounts' },
-  { accessorKey: 'activeValidCount', header: 'Active/Valid' },
-  { accessorKey: 'inUseCount', header: 'In Use' },
-  { accessorKey: 'idleCount', header: 'Idle' },
-  { accessorKey: 'bannedCount', header: 'Banned' },
-  { accessorKey: 'banRate', header: 'Ban Rate' },
-  { accessorKey: 'usageRate', header: 'Usage Rate' },
-  { accessorKey: 'spend', header: 'Media Spend' },
+  { accessorKey: 'accountCount', header: '账户' },
+  { accessorKey: 'activeValidCount', header: '有效活跃' },
+  { accessorKey: 'inUseCount', header: '使用中' },
+  { accessorKey: 'idleCount', header: '闲置' },
+  { accessorKey: 'bannedCount', header: '封禁' },
+  { accessorKey: 'banRate', header: '封禁率' },
+  { accessorKey: 'usageRate', header: '使用率' },
+  { accessorKey: 'spend', header: '媒体消耗' },
   { id: 'actions', header: '' }
 ])
 

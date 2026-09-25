@@ -10,7 +10,7 @@ defineProps<{
 const columns: TableColumn<BatchImportRow>[] = [
   { accessorKey: 'rowIndex', header: '#' },
   { accessorKey: 'mediaCode', header: '媒体' },
-  { accessorKey: 'externalAccountId', header: 'Account ID' },
+  { accessorKey: 'externalAccountId', header: '账户 ID' },
   { accessorKey: 'name', header: '名称' },
   { accessorKey: 'channelCode', header: '渠道' },
   { accessorKey: 'timezone', header: '时区' },

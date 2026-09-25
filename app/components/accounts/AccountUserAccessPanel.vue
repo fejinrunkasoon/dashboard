@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { appUsers } from '~/mocks/entities'
+import { appUsers, members, teams } from '~/mocks/entities'
 import { accountAccessService, connectionService } from '~/services'
 
 const props = defineProps<{
@@ -14,13 +14,19 @@ const canAssign = ref(false)
 const pending = ref(false)
 const selectedUserId = ref<string | undefined>()
 
+/** Org-wide AppUsers — 显式授权可跨队；不按操作者所属团队过滤。 */
 const assignableUsers = computed(() =>
   appUsers
     .filter(u => u.status === 'ACTIVE' && u.id !== 'user-admin')
-    .map(u => ({
-      label: `${u.displayName} · ${u.roles.join(',')}`,
-      value: u.id
-    }))
+    .map(u => {
+      const member = members.find(m => m.id === u.memberId)
+      const team = teams.find(t => t.id === member?.teamId)
+      const teamLabel = team?.name ?? '未分队'
+      return {
+        label: `${u.displayName} · ${teamLabel} · ${u.roles.join(',')}`,
+        value: u.id
+      }
+    })
 )
 
 async function refresh() {
@@ -86,6 +92,7 @@ const typeLabel: Record<string, string> = {
         </h3>
         <p class="text-xs text-muted mt-0.5">
           与 Connection 权限分离：被分配成员可看账户数据，但不能断开他人的平台连接。
+          显式授权可跨队（与下方运营 Team/Member 分配无关）。
           <span v-if="isOrgAdmin || isTeamManager">你可分配 / 取消分配。</span>
         </p>
       </div>

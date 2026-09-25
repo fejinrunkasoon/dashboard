@@ -26,7 +26,12 @@ useSeoMeta({ title: '全部账户' })
 const toast = useToast()
 const route = useRoute()
 const router = useRouter()
-const { userId: currentViewerUserId } = useCurrentUser()
+const {
+  userId: currentViewerUserId,
+  member: currentMember,
+  canAllocateAccounts,
+  canChangeAccountManager
+} = useCurrentUser()
 
 const { query, activeChips, setFilters, clearFilters, removeFilter } = useAccountFilters({
   page: 1,
@@ -358,6 +363,8 @@ const batchBusy = ref(false)
 const disableReason = ref('')
 const assignTargetTeamId = ref<string | undefined>()
 const assignTargetMemberId = ref<string | undefined>()
+const assignManagerId = ref<string | undefined>()
+const assignProductId = ref<string | undefined>()
 const assignReason = ref('')
 const changeProductId = ref<string | undefined>()
 const changeProductReason = ref('')
@@ -384,6 +391,19 @@ const productOptions = computed(() =>
 const managerOptions = computed(() =>
   members.map(item => ({ label: item.name, value: item.id }))
 )
+
+const canConfirmAssign = computed(() =>
+  Boolean(
+    assignTargetTeamId.value
+    && assignTargetMemberId.value
+    && assignManagerId.value
+    && assignProductId.value
+  )
+)
+
+watch(assignTargetTeamId, () => {
+  assignTargetMemberId.value = undefined
+})
 
 function isSelectable(item: AdAccountListItem): boolean {
   return !isDisabled(item) && item.assetStatus !== 'ARCHIVED'
@@ -505,6 +525,8 @@ function openBatchAssign() {
   if (!assignableSelected.value.length) return
   assignTargetTeamId.value = undefined
   assignTargetMemberId.value = undefined
+  assignManagerId.value = undefined
+  assignProductId.value = undefined
   assignReason.value = ''
   showBatchAssignModal.value = true
 }
@@ -523,6 +545,15 @@ function openBatchProduct() {
 }
 
 function openBatchManager() {
+  if (!canChangeAccountManager.value) {
+    toast.add({
+      title: '无权限',
+      description: '仅平台管理员、组织管理员或团队负责人可更换户管',
+      color: 'error',
+      icon: 'i-lucide-shield-off'
+    })
+    return
+  }
   if (!managerableSelected.value.length) return
   changeManagerId.value = undefined
   changeManagerReason.value = ''
@@ -571,16 +602,31 @@ async function confirmBatchTransfer() {
 async function confirmBatchAssign() {
   const targets = [...assignableSelected.value]
   const teamId = assignTargetTeamId.value
-  if (!targets.length || !teamId || batchBusy.value) return
+  const memberId = assignTargetMemberId.value
+  const managerId = assignManagerId.value
+  const productId = assignProductId.value
+  if (!targets.length || !teamId || !memberId || !managerId || !productId || batchBusy.value) return
+  if (!canAllocateAccounts.value || !currentMember.value) {
+    toast.add({
+      title: '无分配权限',
+      description: '仅 PLATFORM_ADMIN / ORG_ADMIN / TEAM_MANAGER 可分配账户',
+      color: 'error',
+      icon: 'i-lucide-shield-alert'
+    })
+    return
+  }
   batchBusy.value = true
   showBatchAssignModal.value = false
   try {
     await accountService.assignDirect({
       accountIds: targets.map(item => item.id),
       teamId,
-      memberId: assignTargetMemberId.value,
+      memberId,
+      managerId,
+      productId,
       reason: assignReason.value.trim() || null,
-      createdBy: 'mem-lisi'
+      createdBy: currentMember.value.id,
+      actorUserId: currentViewerUserId.value
     })
     const team = teams.find(item => item.id === teamId)
     clearSelection()
@@ -640,6 +686,15 @@ async function confirmBatchProduct() {
 }
 
 async function confirmBatchManager() {
+  if (!canChangeAccountManager.value) {
+    toast.add({
+      title: '无权限',
+      description: '仅平台管理员、组织管理员或团队负责人可更换户管',
+      color: 'error',
+      icon: 'i-lucide-shield-off'
+    })
+    return
+  }
   const targets = [...managerableSelected.value]
   const managerMemberId = changeManagerId.value
   if (!targets.length || !managerMemberId) return
@@ -652,7 +707,8 @@ async function confirmBatchManager() {
       accountId: account.id,
       managerMemberId,
       reason: changeManagerReason.value.trim() || undefined,
-      createdBy: 'mem-lisi'
+      createdBy: currentMember.value?.id ?? 'unknown',
+      actorUserId: currentViewerUserId.value
     }),
     ok => `${ok} 户 → ${manager?.name ?? managerMemberId}`
   )
@@ -668,6 +724,8 @@ function openAssign(account: AdAccountListItem) {
   selectedAccount.value = account
   assignTargetTeamId.value = undefined
   assignTargetMemberId.value = undefined
+  assignManagerId.value = undefined
+  assignProductId.value = undefined
   assignReason.value = ''
   showAssignModal.value = true
 }
@@ -680,6 +738,15 @@ function openChangeProduct(account: AdAccountListItem) {
 }
 
 function openChangeManager(account: AdAccountListItem) {
+  if (!canChangeAccountManager.value) {
+    toast.add({
+      title: '无权限',
+      description: '仅平台管理员、组织管理员或团队负责人可更换户管',
+      color: 'error',
+      icon: 'i-lucide-shield-off'
+    })
+    return
+  }
   selectedAccount.value = account
   changeManagerId.value = account.manager?.id
   changeManagerReason.value = ''
@@ -772,22 +839,40 @@ async function confirmDisable() {
 }
 
 async function confirmAssign() {
-  if (!selectedAccount.value || !assignTargetTeamId.value) return
+  if (
+    !selectedAccount.value
+    || !assignTargetTeamId.value
+    || !assignTargetMemberId.value
+    || !assignManagerId.value
+    || !assignProductId.value
+  ) return
+  if (!canAllocateAccounts.value || !currentMember.value) {
+    toast.add({
+      title: '无分配权限',
+      description: '仅 PLATFORM_ADMIN / ORG_ADMIN / TEAM_MANAGER 可分配账户',
+      color: 'error',
+      icon: 'i-lucide-shield-alert'
+    })
+    return
+  }
   const account = selectedAccount.value
   const team = teams.find(item => item.id === assignTargetTeamId.value)
-  const member = members.find(item => item.id === assignTargetMemberId.value)
+  const targetMember = members.find(item => item.id === assignTargetMemberId.value)
   try {
     await accountService.assignDirect({
       accountIds: [account.id],
       teamId: assignTargetTeamId.value,
       memberId: assignTargetMemberId.value,
+      managerId: assignManagerId.value,
+      productId: assignProductId.value,
       reason: assignReason.value.trim() || undefined,
-      createdBy: 'mem-lisi'
+      createdBy: currentMember.value.id,
+      actorUserId: currentViewerUserId.value
     })
     showAssignModal.value = false
     toast.add({
       title: '分配成功',
-      description: `${account.externalAccountId} → ${team?.name ?? ''}${member ? ` / ${member.name}` : ''}`,
+      description: `${account.externalAccountId} → ${team?.name ?? ''}${targetMember ? ` / ${targetMember.name}` : ''}`,
       icon: 'i-lucide-check',
       color: 'success'
     })
@@ -832,6 +917,15 @@ async function confirmChangeProduct() {
 }
 
 async function confirmChangeManager() {
+  if (!canChangeAccountManager.value) {
+    toast.add({
+      title: '无权限',
+      description: '仅平台管理员、组织管理员或团队负责人可更换户管',
+      color: 'error',
+      icon: 'i-lucide-shield-off'
+    })
+    return
+  }
   if (!selectedAccount.value || !changeManagerId.value) return
   const account = selectedAccount.value
   const manager = members.find(item => item.id === changeManagerId.value)
@@ -840,7 +934,8 @@ async function confirmChangeManager() {
       accountId: account.id,
       managerMemberId: changeManagerId.value,
       reason: changeManagerReason.value.trim() || undefined,
-      createdBy: 'mem-lisi'
+      createdBy: currentMember.value?.id ?? 'unknown',
+      actorUserId: currentViewerUserId.value
     })
     showManagerModal.value = false
     toast.add({
@@ -862,36 +957,52 @@ async function confirmChangeManager() {
 
 function moreItems(account: AdAccountListItem) {
   const disabled = isDisabled(account)
-  return [[{
+  const primary: {
+    label: string
+    icon: string
+    disabled?: boolean
+    onSelect: () => void
+  }[] = [{
     label: '详情',
     icon: 'i-lucide-eye',
     onSelect: () => openDetail(account)
-  }, {
-    label: '分配',
-    icon: 'i-lucide-user-plus',
-    disabled: disabled || !isPoolEligible(account),
-    onSelect: () => openAssign(account)
-  }, {
+  }]
+  if (canAllocateAccounts.value) {
+    primary.push({
+      label: '分配',
+      icon: 'i-lucide-user-plus',
+      disabled: disabled || !isPoolEligible(account),
+      onSelect: () => openAssign(account)
+    })
+  }
+  primary.push({
     label: '回收',
     icon: 'i-lucide-rotate-ccw',
     disabled: disabled || !isAssigned(account),
     onSelect: () => openRecycle(account)
-  }], [{
-    label: '更换产品',
-    icon: 'i-lucide-package',
-    disabled,
-    onSelect: () => openChangeProduct(account)
-  }, {
-    label: '更换户管',
-    icon: 'i-lucide-user-cog',
-    disabled,
-    onSelect: () => openChangeManager(account)
-  }, {
-    label: '停用',
-    icon: 'i-lucide-ban',
-    disabled,
-    onSelect: () => openDisable(account)
-  }]]
+  })
+  return [primary, [
+    {
+      label: '更换产品',
+      icon: 'i-lucide-package',
+      disabled,
+      onSelect: () => openChangeProduct(account)
+    },
+    ...(canChangeAccountManager.value
+      ? [{
+          label: '更换户管',
+          icon: 'i-lucide-user-cog',
+          disabled,
+          onSelect: () => openChangeManager(account)
+        }]
+      : []),
+    {
+      label: '停用',
+      icon: 'i-lucide-ban',
+      disabled,
+      onSelect: () => openDisable(account)
+    }
+  ]]
 }
 
 const columns: TableColumn<AdAccountListItem>[] = [{
@@ -935,7 +1046,7 @@ const columns: TableColumn<AdAccountListItem>[] = [{
   header: '媒体状态'
 }, {
   id: 'spendLimit',
-  header: 'Spend Limit'
+  header: '消耗上限'
 }, {
   id: 'amountSpent',
   header: '已花费'
@@ -981,20 +1092,15 @@ const exportColumns = [
   { key: 'manager', header: '户管' },
   { key: 'assetStatus', header: '资产状态' },
   { key: 'mediaStatus', header: '媒体状态' },
-  { key: 'spendLimit', header: 'Spend Limit' },
+  { key: 'spendLimit', header: '消耗上限' },
   { key: 'amountSpent', header: '已花费' },
   { key: 'effectiveRemaining', header: '有效可消耗' },
   { key: 'spend7d', header: '7D Spend' },
   { key: 'note', header: '备注' }
 ]
 
-async function getExportRows() {
-  const list = await accountService.getAccounts({
-    ...buildListQuery(),
-    page: 1,
-    pageSize: 5000
-  })
-  return list.data.map(item => ({
+function mapExportRow(item: AdAccountListItem) {
+  return {
     externalAccountId: item.externalAccountId,
     accountName: item.accountName ?? '',
     media: item.media.name,
@@ -1011,7 +1117,24 @@ async function getExportRows() {
     effectiveRemaining: item.effectiveRemaining ?? '',
     spend7d: item.spend7d,
     note: item.note ?? ''
-  }))
+  }
+}
+
+/** Page through the filtered result set so large exports stay memory-friendly. */
+async function* getExportRows() {
+  const pageSize = 500
+  let page = 1
+  for (;;) {
+    const list = await accountService.getAccounts({
+      ...buildListQuery(),
+      page,
+      pageSize
+    })
+    if (!list.data.length) break
+    yield list.data.map(mapExportRow)
+    if (list.data.length < pageSize) break
+    page += 1
+  }
 }
 </script>
 
@@ -1046,7 +1169,7 @@ async function getExportRows() {
         variant="subtle"
         icon="i-lucide-shield"
         title="按当前用户权限过滤"
-        description="列表经 AccountAccessService 过滤。左下角可切换 Mock 身份：李四仅见被分配账户；王五（Org Admin）可见全部。"
+        description="列表经 AccountAccessService 过滤。左下角可切换 Mock 身份：李四（成员）仅见分配账户且不可更换户管；王五（Org Admin）可见全部并可更换户管。"
       />
       <div class="flex flex-wrap items-center gap-3">
         <FiltersQuickFilter v-model="quickMedia" label="媒体" :options="mediaFilterOptions" />
@@ -1083,12 +1206,14 @@ async function getExportRows() {
         <UDropdownMenu
           v-if="selectedIds.length"
           :items="[[
-            {
-              label: `分配 (${assignableSelected.length})`,
-              icon: 'i-lucide-user-plus',
-              disabled: !assignableSelected.length,
-              onSelect: openBatchAssign
-            },
+            ...(canAllocateAccounts
+              ? [{
+                  label: `分配 (${assignableSelected.length})`,
+                  icon: 'i-lucide-user-plus',
+                  disabled: !assignableSelected.length,
+                  onSelect: openBatchAssign
+                }]
+              : []),
             {
               label: `转移 (${transferableSelected.length})`,
               icon: 'i-lucide-arrow-right-left',
@@ -1108,12 +1233,14 @@ async function getExportRows() {
               disabled: !productableSelected.length,
               onSelect: openBatchProduct
             },
-            {
-              label: `更换户管 (${managerableSelected.length})`,
-              icon: 'i-lucide-user-cog',
-              disabled: !managerableSelected.length,
-              onSelect: openBatchManager
-            }
+            ...(canChangeAccountManager
+              ? [{
+                  label: `更换户管 (${managerableSelected.length})`,
+                  icon: 'i-lucide-user-cog',
+                  disabled: !managerableSelected.length,
+                  onSelect: openBatchManager
+                }]
+              : [])
           ], [
             {
               label: `停用 (${disableableSelected.length})`,
@@ -1193,14 +1320,13 @@ async function getExportRows() {
           </template>
           <template #externalAccountId-cell="{ row }">
             <div class="min-w-36">
-              <UButton
-                :label="cellAccount(row).externalAccountId"
-                variant="ghost"
-                color="neutral"
-                class="font-mono text-sm -px-2 -py-1"
-                @click="openDetail(cellAccount(row))"
-              />
-              <p class="text-xs text-muted truncate ps-2">
+              <NuxtLink
+                :to="`/accounts/${cellAccount(row).id}`"
+                class="font-mono text-sm text-highlighted hover:text-primary hover:underline transition-colors"
+              >
+                {{ cellAccount(row).externalAccountId }}
+              </NuxtLink>
+              <p class="text-xs text-muted truncate">
                 {{ cellAccount(row).accountName ?? '—' }}
               </p>
             </div>
@@ -1211,7 +1337,12 @@ async function getExportRows() {
           </template>
 
           <template #channel-cell="{ row }">
-            <span>{{ cellAccount(row).channel.name }}</span>
+            <NuxtLink
+              :to="`/channels/${cellAccount(row).channel.id}`"
+              class="text-highlighted hover:text-primary hover:underline transition-colors"
+            >
+              {{ cellAccount(row).channel.name }}
+            </NuxtLink>
           </template>
 
           <template #platformAsset-cell="{ row }">
@@ -1235,7 +1366,14 @@ async function getExportRows() {
           </template>
 
           <template #team-cell="{ row }">
-            <span>{{ cellAccount(row).team?.name ?? '—' }}</span>
+            <NuxtLink
+              v-if="cellAccount(row).team"
+              :to="`/teams/${cellAccount(row).team.id}`"
+              class="text-highlighted hover:text-primary hover:underline transition-colors"
+            >
+              {{ cellAccount(row).team.name }}
+            </NuxtLink>
+            <span v-else>—</span>
           </template>
 
           <template #member-cell="{ row }">
@@ -1610,7 +1748,7 @@ async function getExportRows() {
           </template>
           <div class="space-y-4">
             <p class="text-sm text-muted">
-              将 {{ assignableSelected.length }} 个池内账户直接分配到同一团队（DIRECT）。
+              将 {{ assignableSelected.length }} 个池内账户直接分配到同一团队。
             </p>
             <ul class="text-xs font-mono space-y-1 max-h-32 overflow-auto">
               <li v-for="account in assignableSelected" :key="account.id">
@@ -1626,15 +1764,32 @@ async function getExportRows() {
                 placeholder="选择目标团队"
               />
             </UFormField>
-            <UFormField label="目标成员" description="可选">
+            <UFormField label="目标成员" required>
               <USelectMenu
                 v-model="assignTargetMemberId"
                 :items="assignTeamMembers.map(m => ({ label: m.name, value: m.id }))"
                 value-key="value"
                 label-key="label"
                 placeholder="选择目标成员"
-                :clear="true"
                 :disabled="!assignTargetTeamId"
+              />
+            </UFormField>
+            <UFormField label="户管" required>
+              <USelectMenu
+                v-model="assignManagerId"
+                :items="managerOptions"
+                value-key="value"
+                label-key="label"
+                placeholder="选择户管"
+              />
+            </UFormField>
+            <UFormField label="产品" required>
+              <USelectMenu
+                v-model="assignProductId"
+                :items="productOptions"
+                value-key="value"
+                label-key="label"
+                placeholder="选择产品"
               />
             </UFormField>
             <UFormField label="分配原因">
@@ -1654,7 +1809,7 @@ async function getExportRows() {
                 icon="i-lucide-user-plus"
                 color="primary"
                 :loading="batchBusy"
-                :disabled="!assignTargetTeamId"
+                :disabled="!canConfirmAssign"
                 @click="confirmBatchAssign"
               />
             </div>
@@ -1890,7 +2045,7 @@ async function getExportRows() {
               />
             </UFormField>
 
-            <UFormField label="目标成员" description="可选">
+            <UFormField label="目标成员" required>
               <USelectMenu
                 v-model="assignTargetMemberId"
                 :items="assignTeamMembers.map(m => ({ label: m.name, value: m.id }))"
@@ -1898,6 +2053,26 @@ async function getExportRows() {
                 label-key="label"
                 placeholder="选择目标成员"
                 :disabled="!assignTargetTeamId"
+              />
+            </UFormField>
+
+            <UFormField label="户管" required>
+              <USelectMenu
+                v-model="assignManagerId"
+                :items="managerOptions"
+                value-key="value"
+                label-key="label"
+                placeholder="选择户管"
+              />
+            </UFormField>
+
+            <UFormField label="产品" required>
+              <USelectMenu
+                v-model="assignProductId"
+                :items="productOptions"
+                value-key="value"
+                label-key="label"
+                placeholder="选择产品"
               />
             </UFormField>
 
@@ -1918,7 +2093,7 @@ async function getExportRows() {
                 label="确认分配"
                 icon="i-lucide-user-plus"
                 color="primary"
-                :disabled="!assignTargetTeamId"
+                :disabled="!canConfirmAssign"
                 @click="confirmAssign"
               />
             </div>

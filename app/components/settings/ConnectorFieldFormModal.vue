@@ -33,8 +33,8 @@ const optionsText = ref('')
 const isEdit = computed(() => Boolean(props.field))
 
 const typeOptions = [
-  { label: 'text', value: 'text' },
-  { label: 'select', value: 'select' }
+  { label: '文本', value: 'text' },
+  { label: '下拉选择', value: 'select' }
 ]
 
 watch(
@@ -111,13 +111,13 @@ function onSubmit() {
               · {{ usage === 'DEMAND' ? '申请单' : '账户映射' }}
             </span>
             <p class="text-xs text-muted">
-              key 创建后不可改。Timezone 是公共字段，不在此配置。
+              键名创建后不可改。时区是公共字段，不在此配置。
             </p>
           </div>
         </template>
 
         <div class="space-y-4">
-          <UFormField label="Key" required>
+          <UFormField label="键名" required>
             <UInput
               v-model="key"
               :disabled="isEdit"
@@ -147,7 +147,7 @@ function onSubmit() {
           </UFormField>
           <UFormField
             v-if="usage === 'ACCOUNT_MAP'"
-            label="Source Key"
+            label="来源键"
             hint="媒体侧字段名（仅配置，不拉取）"
           >
             <UInput v-model="sourceKey" class="font-mono" placeholder="例如：name" />

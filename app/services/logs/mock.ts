@@ -1,11 +1,19 @@
+import type { AuditAction, AuditLog } from '../../domain/audit'
+import type { SyncJob } from '../../domain/sync'
+import { appUsers, mediaPlatforms } from '../../mocks/entities'
+import { auditService } from '../audit/mock'
+import { mediaSyncService } from '../media-sync/mock'
 import type {
   ConnectorSyncLog,
   LogsService,
-  OperationLog
+  OperationLog,
+  OperationLogQuery,
+  SyncLogListQuery,
+  SyncLogStatus
 } from './types'
-import { auditLogs, appUsers } from '../../mocks/entities'
 
-const operationLogs: OperationLog[] = [
+/** Demo seed — 保证空审计时仍可浏览过滤；真实操作写入的 audit / sync job 会排在前面。 */
+const seedOperationLogs: OperationLog[] = [
   {
     id: 'op-1',
     at: '2026-09-19T08:12:00.000Z',
@@ -53,71 +61,134 @@ const operationLogs: OperationLog[] = [
   }
 ]
 
-const syncLogs: ConnectorSyncLog[] = [
-  {
-    id: 'sync-1',
-    at: '2026-09-19T06:00:00.000Z',
-    connector: 'meta-ads',
-    media: 'Meta',
-    scope: 'BM · 全量账户',
-    status: 'SUCCEEDED',
-    count: 128,
-    errorSummary: null
-  },
-  {
-    id: 'sync-2',
-    at: '2026-09-19T05:30:00.000Z',
-    connector: 'google-ads',
-    media: 'Google',
-    scope: 'MCC · 昨日消耗',
-    status: 'PARTIAL',
-    count: 46,
-    errorSummary: '3 个账户凭证过期，已跳过'
-  },
-  {
-    id: 'sync-3',
-    at: '2026-09-18T22:10:00.000Z',
-    connector: 'tiktok-ads',
-    media: 'TikTok',
-    scope: 'BC · 账户发现',
-    status: 'FAILED',
-    count: 0,
-    errorSummary: 'Connector 未绑定凭证'
-  },
-  {
-    id: 'sync-4',
-    at: '2026-09-18T06:00:00.000Z',
-    connector: 'meta-ads',
-    media: 'Meta',
-    scope: 'BM · 增量',
-    status: 'SUCCEEDED',
-    count: 12,
-    errorSummary: null
-  }
-]
+const ACTION_LABEL: Record<AuditAction, string> = {
+  CONNECT_PLATFORM: '连接平台',
+  REAUTHORIZE_CONNECTION: '重新授权',
+  DISCONNECT_PLATFORM: '断开连接',
+  DISCOVER_ACCOUNT: '发现账户',
+  IMPORT_ACCOUNT: '导入账户',
+  ASSIGN_ACCOUNT: '分配账户',
+  UNASSIGN_ACCOUNT: '取消分配',
+  ENABLE_SYNC: '启用同步',
+  DISABLE_SYNC: '停用同步',
+  CHANGE_PRIMARY_CONNECTION: '更换主连接',
+  ARCHIVE_ACCOUNT: '归档账户'
+}
 
-function auditToOperationLog(): OperationLog[] {
-  return auditLogs.map((entry) => {
-    const actor = appUsers.find(u => u.id === entry.actorUserId)
-    return {
-      id: entry.id,
-      at: entry.createdAt,
-      actor: actor?.displayName ?? entry.actorUserId,
-      module: '平台连接 / 账户权限',
-      action: entry.action,
-      target: `${entry.resourceType}:${entry.resourceId}`,
-      result: 'SUCCESS' as const
-    }
-  })
+const ACTION_MODULE: Record<AuditAction, string> = {
+  CONNECT_PLATFORM: '平台连接',
+  REAUTHORIZE_CONNECTION: '平台连接',
+  DISCONNECT_PLATFORM: '平台连接',
+  DISCOVER_ACCOUNT: '平台连接',
+  IMPORT_ACCOUNT: '平台连接',
+  CHANGE_PRIMARY_CONNECTION: '平台连接',
+  ASSIGN_ACCOUNT: '账户权限',
+  UNASSIGN_ACCOUNT: '账户权限',
+  ARCHIVE_ACCOUNT: '账户权限',
+  ENABLE_SYNC: '同步控制',
+  DISABLE_SYNC: '同步控制'
+}
+
+function mediaName(mediaId: string) {
+  return mediaPlatforms.find(p => p.id === mediaId)?.name ?? mediaId
+}
+
+function auditToOperationLog(entry: AuditLog): OperationLog {
+  const actor = appUsers.find(u => u.id === entry.actorUserId)
+  return {
+    id: entry.id,
+    at: entry.createdAt,
+    actor: actor?.displayName ?? entry.actorUserId,
+    module: ACTION_MODULE[entry.action] ?? '平台连接',
+    action: ACTION_LABEL[entry.action] ?? entry.action,
+    target: `${entry.resourceType}:${entry.resourceId}`,
+    result: 'SUCCESS'
+  }
+}
+
+function jobToConnectorSyncLog(job: SyncJob): ConnectorSyncLog {
+  let status: SyncLogStatus = job.status
+  if (job.status === 'SUCCEEDED' && (job.stats.conflictCount > 0 || job.errorMessage)) {
+    status = 'PARTIAL'
+  }
+  const count = job.stats.discovered || job.stats.imported || job.stats.newCount
+  const scopeParts = [
+    job.connectionId ? `connection:${job.connectionId}` : null,
+    '账户发现'
+  ].filter(Boolean)
+  return {
+    id: job.id,
+    at: job.finishedAt ?? job.startedAt,
+    connector: job.implKey,
+    media: mediaName(job.mediaId),
+    mediaId: job.mediaId,
+    scope: scopeParts.join(' · '),
+    status,
+    count,
+    errorSummary: job.errorMessage
+  }
+}
+
+function matchKeyword(haystack: string, keyword?: string) {
+  if (!keyword?.trim()) return true
+  return haystack.toLowerCase().includes(keyword.trim().toLowerCase())
+}
+
+function filterOperationLogs(rows: OperationLog[], query?: OperationLogQuery) {
+  let next = rows
+  if (query?.module) {
+    next = next.filter(r => r.module === query.module)
+  }
+  if (query?.result) {
+    next = next.filter(r => r.result === query.result)
+  }
+  if (query?.actor?.trim()) {
+    const q = query.actor.trim().toLowerCase()
+    next = next.filter(r => r.actor.toLowerCase().includes(q))
+  }
+  if (query?.keyword?.trim()) {
+    const q = query.keyword.trim().toLowerCase()
+    next = next.filter(r =>
+      matchKeyword(`${r.module} ${r.action} ${r.target} ${r.actor}`, q)
+    )
+  }
+  return next
+}
+
+function filterSyncLogs(rows: ConnectorSyncLog[], query?: SyncLogListQuery) {
+  let next = rows
+  if (query?.mediaId) {
+    next = next.filter(r => r.mediaId === query.mediaId)
+  }
+  if (query?.status) {
+    next = next.filter(r => r.status === query.status)
+  }
+  if (query?.keyword?.trim()) {
+    const q = query.keyword.trim().toLowerCase()
+    next = next.filter(r =>
+      matchKeyword(`${r.connector} ${r.media} ${r.scope} ${r.errorSummary ?? ''}`, q)
+    )
+  }
+  return next
 }
 
 export const logsService: LogsService = {
-  async getOperationLogs() {
-    const merged = [...auditToOperationLog(), ...operationLogs]
+  async getOperationLogs(query) {
+    const live = (await auditService.list({ limit: 500 })).map(auditToOperationLog)
+    const merged = [...live, ...seedOperationLogs]
     merged.sort((a, b) => b.at.localeCompare(a.at))
-    return merged.map(item => ({ ...item }))
+    return filterOperationLogs(merged, query).map(item => ({ ...item }))
   },
-  async getSyncLogs() {
-    return syncLogs.map(item => ({ ...item }))
+
+  async getSyncLogs(query) {
+    const { data: jobs } = await mediaSyncService.getJobs({ page: 1, pageSize: 200 })
+    const rows = jobs.map(jobToConnectorSyncLog)
+    rows.sort((a, b) => b.at.localeCompare(a.at))
+    return filterSyncLogs(rows, query).map(item => ({ ...item }))
+  },
+
+  async listOperationModules() {
+    const rows = await this.getOperationLogs()
+    return [...new Set(rows.map(r => r.module))].sort((a, b) => a.localeCompare(b, 'zh-CN'))
   }
 }

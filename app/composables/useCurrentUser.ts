@@ -57,6 +57,26 @@ export function useCurrentUser() {
     return teams.some(t => t.leaderMemberId === u.memberId)
   })
 
+  /** Matches ROLE_CAPABILITIES.allocateAccount — pool DIRECT / Demand allocate. */
+  const canAllocateAccounts = computed(() => {
+    const u = user.value
+    if (!u) return false
+    return u.roles.includes('PLATFORM_ADMIN')
+      || u.roles.includes('ORG_ADMIN')
+      || u.roles.includes('TEAM_MANAGER')
+  })
+
+  /** Matches ROLE_CAPABILITIES.changeAccountManager — 更换户管. */
+  const canChangeAccountManager = computed(() => canAllocateAccounts.value)
+
+  /** Matches ROLE_CAPABILITIES.reviewPaymentAddress — approve / reject 打款地址. */
+  const canReviewPaymentAddress = computed(() => {
+    const u = user.value
+    if (!u) return false
+    return u.roles.includes('PLATFORM_ADMIN')
+      || u.roles.includes('ORG_ADMIN')
+  })
+
   function setUser(id: string) {
     if (!appUsers.some(u => u.id === id)) return
     userId.value = id
@@ -76,6 +96,9 @@ export function useCurrentUser() {
     isOrgAdmin,
     isPlatformAdmin,
     isTeamManager,
+    canAllocateAccounts,
+    canChangeAccountManager,
+    canReviewPaymentAddress,
     setUser,
     switchableUsers,
     DEFAULT_ORGANIZATION_ID

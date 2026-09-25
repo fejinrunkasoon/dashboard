@@ -80,7 +80,13 @@ export function useBatchImport() {
   }
 
   async function downloadTemplate(format: 'csv' | 'xlsx') {
-    await batchImportService.downloadTemplate(format)
+    try {
+      await batchImportService.downloadTemplate(format)
+    } catch (error) {
+      // User cancelled the save dialog — not an error.
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      throw error
+    }
   }
 
   async function uploadCsv(text: string, filename: string) {

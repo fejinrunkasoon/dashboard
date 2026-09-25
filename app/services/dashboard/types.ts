@@ -1,7 +1,7 @@
 import type { Alert } from '../../domain/alert'
 
 export interface DashboardOverviewInput {
-  /** Number of days ending at MOCK_TODAY for spend trend (clamped 7–30). */
+  /** Number of days ending at MOCK_TODAY for spend windows (clamped 7–30). */
   trendDays?: number
 }
 
@@ -10,7 +10,8 @@ export interface DashboardKpis {
   inUse: number
   /** 0–1 */
   usageRate: number
-  todaySpend: number
+  /** Media spend in the selected date window. */
+  periodSpend: number
   /** Current mediaBanned stock — not fabricated "today new bans" */
   bannedCount: number
   openAlerts: number
@@ -43,7 +44,8 @@ export interface DashboardChannelRow {
   name: string
   currentValid: number
   inUse: number
-  spend30d: number
+  /** Media spend in the selected date window. */
+  spend: number
   abnormal: number
 }
 
@@ -52,11 +54,14 @@ export interface DashboardTeamRow {
   name: string
   accounts: number
   usageRate: number
-  spend7d: number
+  /** Media spend in the selected date window. */
+  spend: number
   banRate: number
 }
 
 export interface DashboardOverviewBundle {
+  /** Days in the active spend window (clamped 7–30). */
+  rangeDays: number
   kpis: DashboardKpis
   spendTrend: DashboardSpendTrendPoint[]
   ownershipSpend: DashboardOwnershipSpend

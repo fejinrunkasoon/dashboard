@@ -17,10 +17,10 @@ const emit = defineEmits<{
 
 const columns: TableColumn<ConnectorBindingListItem>[] = [
   { accessorKey: 'mediaName', header: '媒体' },
-  { accessorKey: 'implDisplayName', header: 'Connector' },
-  { accessorKey: 'assetTypeNames', header: 'Asset Types' },
+  { accessorKey: 'implDisplayName', header: '连接器' },
+  { accessorKey: 'assetTypeNames', header: '资产类型' },
   { accessorKey: 'status', header: '状态' },
-  { accessorKey: 'credentialCount', header: 'Credential' },
+  { accessorKey: 'credentialCount', header: '凭据' },
   { id: 'actions', header: '操作' }
 ]
 

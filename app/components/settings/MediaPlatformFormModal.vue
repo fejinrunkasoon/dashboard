@@ -71,7 +71,7 @@ async function onSubmit() {
         </template>
 
         <div class="space-y-4">
-          <UFormField label="Code" required>
+          <UFormField label="编码" required>
             <UInput
               v-model="code"
               :disabled="isEdit"
@@ -82,7 +82,7 @@ async function onSubmit() {
           <UFormField label="名称" required>
             <UInput v-model="name" placeholder="例如：X Ads" />
           </UFormField>
-          <UFormField label="Logo URL">
+          <UFormField label="Logo 地址">
             <UInput v-model="logoUrl" placeholder="可选 https://…" />
           </UFormField>
         </div>

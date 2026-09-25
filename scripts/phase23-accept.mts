@@ -27,14 +27,23 @@ async function main() {
 
   try {
     await channelService.approvePaymentAddress('cpa-gamma-pending', { actorMemberId: 'mem-lisi' })
-    fail('non-leader should fail')
+    fail('non-admin should fail')
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    if (!msg.includes('leader')) fail(`unexpected: ${msg}`)
-    ok('non-leader cannot approve')
+    if (!msg.includes('ORG_ADMIN') && !msg.includes('PLATFORM_ADMIN')) fail(`unexpected: ${msg}`)
+    ok('non-admin cannot approve')
   }
 
-  await channelService.approvePaymentAddress('cpa-gamma-pending', { actorMemberId: 'mem-sunhao' })
+  try {
+    await channelService.approvePaymentAddress('cpa-gamma-pending', { actorMemberId: 'mem-sunhao' })
+    fail('team leader without admin role should fail')
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (!msg.includes('ORG_ADMIN') && !msg.includes('PLATFORM_ADMIN')) fail(`unexpected: ${msg}`)
+    ok('team leader cannot approve without admin role')
+  }
+
+  await channelService.approvePaymentAddress('cpa-gamma-pending', { actorMemberId: 'mem-wangwu' })
   const pay = await channelService.createPrepayment({
     channelId: 'ch-gamma',
     paymentAddressId: 'cpa-gamma-pending',

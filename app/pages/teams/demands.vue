@@ -2,6 +2,7 @@
 import type { TableColumn } from '@nuxt/ui'
 import type { AccountDemand, AccountDemandStatus, DemandPriority } from '~/domain'
 import { demandService, mediaService, teamService } from '~/services'
+import { DEMAND_STATUS_LABEL, labelOf } from '~/utils/labels'
 
 useSeoMeta({ title: '团队需求' })
 
@@ -26,7 +27,15 @@ const medias = await mediaService.getMediaPlatforms({ status: 'ACTIVE' })
 
 const statusOptions = [
   { label: '未完成', value: 'all' },
-  ...OPEN_STATUSES.map(value => ({ label: value, value }))
+  ...OPEN_STATUSES.map(value => ({
+    label: ({
+      DRAFT: '草稿',
+      SUBMITTED: '已提交',
+      APPROVED: '已审批',
+      PARTIALLY_ALLOCATED: '部分分配'
+    } as Record<string, string>)[value] ?? value,
+    value
+  }))
 ]
 
 const teamOptions = [
@@ -36,10 +45,10 @@ const teamOptions = [
 
 const priorityOptions = [
   { label: '全部优先级', value: 'all' },
-  { label: 'LOW', value: 'LOW' },
-  { label: 'NORMAL', value: 'NORMAL' },
-  { label: 'HIGH', value: 'HIGH' },
-  { label: 'URGENT', value: 'URGENT' }
+  { label: '低', value: 'LOW' },
+  { label: '普通', value: 'NORMAL' },
+  { label: '高', value: 'HIGH' },
+  { label: '紧急', value: 'URGENT' }
 ]
 
 const expectedOptions = [
@@ -149,23 +158,19 @@ const pagedRows = computed(() => {
 })
 
 const columns: TableColumn<AccountDemand>[] = [
-  { accessorKey: 'demandNo', header: 'Demand' },
-  { id: 'team', header: 'Team' },
-  { accessorKey: 'status', header: 'Status' },
-  { accessorKey: 'priority', header: 'Priority' },
-  { id: 'expectedDate', header: 'Expected' }
+  { accessorKey: 'demandNo', header: '需求号' },
+  { id: 'team', header: '团队' },
+  { accessorKey: 'status', header: '状态' },
+  { accessorKey: 'priority', header: '优先级' },
+  { id: 'expectedDate', header: '期望日期' }
 ]
 
-function openDemand(row: AccountDemand) {
-  void navigateTo(`/teams/${row.teamId}?tab=demands`)
-}
-
 const exportColumns = [
-  { key: 'demandNo', header: 'Demand' },
-  { key: 'team', header: 'Team' },
-  { key: 'status', header: 'Status' },
-  { key: 'priority', header: 'Priority' },
-  { key: 'expectedDate', header: 'Expected' }
+  { key: 'demandNo', header: '需求号' },
+  { key: 'team', header: '团队' },
+  { key: 'status', header: '状态' },
+  { key: 'priority', header: '优先级' },
+  { key: 'expectedDate', header: '期望日期' }
 ]
 
 async function getExportRows() {
@@ -239,7 +244,7 @@ async function getExportRows() {
         </div>
         <FiltersActiveFilterChips :chips="chips" @remove="remove" @clear="clear" />
         <p class="text-xs text-muted">
-          跨团队未完成需求。点击行进入该团队的 Account Demand Tab。
+          跨团队未完成需求。点击行进入该团队的「账户需求」页签。
         </p>
 
         <div v-if="errorMessage" class="text-sm text-error">
@@ -255,19 +260,23 @@ async function getExportRows() {
         <template v-else>
           <UTable :data="pagedRows" :columns="columns">
             <template #demandNo-cell="{ row }">
-              <UButton
-                :label="row.original.demandNo"
-                variant="ghost"
-                color="neutral"
-                class="font-mono -px-2"
-                @click="openDemand(row.original)"
-              />
+              <NuxtLink
+                :to="`/teams/${row.original.teamId}?tab=demands`"
+                class="font-mono text-highlighted hover:text-primary hover:underline transition-colors"
+              >
+                {{ row.original.demandNo }}
+              </NuxtLink>
             </template>
             <template #team-cell="{ row }">
-              {{ teamName[row.original.teamId] ?? row.original.teamId }}
+              <NuxtLink
+                :to="`/teams/${row.original.teamId}`"
+                class="text-highlighted hover:text-primary hover:underline transition-colors"
+              >
+                {{ teamName[row.original.teamId] ?? row.original.teamId }}
+              </NuxtLink>
             </template>
             <template #status-cell="{ row }">
-              <UBadge :label="row.original.status" variant="subtle" size="xs" />
+              <UBadge :label="labelOf(DEMAND_STATUS_LABEL, row.original.status)" variant="subtle" size="xs" />
             </template>
             <template #expectedDate-cell="{ row }">
               {{ row.original.expectedDate ?? '—' }}

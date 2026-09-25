@@ -2,6 +2,7 @@
 import type { TableColumn } from '@nuxt/ui'
 import type { ChannelAccountOrder, ChannelAccountOrderStatus } from '~/domain'
 import { DEMAND_TIMEZONE_OPTIONS } from '~/domain'
+import { ORDER_STATUS_LABEL, labelOf } from '~/utils/labels'
 import { channelService, demandService, mediaService } from '~/services'
 
 useSeoMeta({ title: '渠道订单' })
@@ -21,19 +22,19 @@ const medias = await mediaService.getMediaPlatforms({ status: 'ACTIVE' })
 
 const statusOptions = [
   { label: '全部状态', value: 'all' },
-  { label: 'DRAFT', value: 'DRAFT' },
-  { label: 'PENDING', value: 'PENDING' },
-  { label: 'PENDING_CONFIRM', value: 'PENDING_CONFIRM' },
-  { label: 'ACCEPTED', value: 'ACCEPTED' },
-  { label: 'REJECTED', value: 'REJECTED' },
-  { label: 'TIMEOUT', value: 'TIMEOUT' },
-  { label: 'PROCESSING', value: 'PROCESSING' },
-  { label: 'PARTIAL_DELIVERED', value: 'PARTIAL_DELIVERED' },
-  { label: 'DELIVERED', value: 'DELIVERED' },
-  { label: 'PARTIAL_CLOSED', value: 'PARTIAL_CLOSED' },
-  { label: 'PARSING_EXCEPTION', value: 'PARSING_EXCEPTION' },
-  { label: 'QUANTITY_EXCEPTION', value: 'QUANTITY_EXCEPTION' },
-  { label: 'CANCELLED', value: 'CANCELLED' }
+  { label: '草稿', value: 'DRAFT' },
+  { label: '待处理', value: 'PENDING' },
+  { label: '待确认', value: 'PENDING_CONFIRM' },
+  { label: '已接单', value: 'ACCEPTED' },
+  { label: '已拒绝', value: 'REJECTED' },
+  { label: '已超时', value: 'TIMEOUT' },
+  { label: '履约中', value: 'PROCESSING' },
+  { label: '部分交付', value: 'PARTIAL_DELIVERED' },
+  { label: '已交付', value: 'DELIVERED' },
+  { label: '部分关闭', value: 'PARTIAL_CLOSED' },
+  { label: '解析异常', value: 'PARSING_EXCEPTION' },
+  { label: '数量异常', value: 'QUANTITY_EXCEPTION' },
+  { label: '已取消', value: 'CANCELLED' }
 ]
 
 const channelOptions = [
@@ -151,28 +152,24 @@ const pagedRows = computed(() => {
 })
 
 const columns: TableColumn<ChannelAccountOrder>[] = [
-  { accessorKey: 'orderNo', header: 'Order' },
+  { accessorKey: 'orderNo', header: '订单号' },
   { id: 'external', header: '外部单号' },
-  { id: 'channel', header: 'Channel' },
-  { id: 'media', header: 'Media' },
-  { accessorKey: 'requestedQuantity', header: 'Requested' },
-  { accessorKey: 'deliveredQuantity', header: 'Delivered' },
-  { accessorKey: 'status', header: 'Status' }
+  { id: 'channel', header: '渠道' },
+  { id: 'media', header: '媒体' },
+  { accessorKey: 'requestedQuantity', header: '需求量' },
+  { accessorKey: 'deliveredQuantity', header: '已交付' },
+  { accessorKey: 'status', header: '状态' }
 ]
 
-function openOrder(order: ChannelAccountOrder) {
-  void navigateTo(`/channels/${order.channelId}?tab=orders`)
-}
-
 const exportColumns = [
-  { key: 'orderNo', header: 'Order' },
+  { key: 'orderNo', header: '订单号' },
   { key: 'externalOrderNo', header: '外部单号' },
-  { key: 'channel', header: 'Channel' },
-  { key: 'media', header: 'Media' },
-  { key: 'requestedQuantity', header: 'Requested' },
-  { key: 'deliveredQuantity', header: 'Delivered' },
-  { key: 'timezone', header: 'Timezone' },
-  { key: 'status', header: 'Status' }
+  { key: 'channel', header: '渠道' },
+  { key: 'media', header: '媒体' },
+  { key: 'requestedQuantity', header: '需求量' },
+  { key: 'deliveredQuantity', header: '已交付' },
+  { key: 'timezone', header: '时区' },
+  { key: 'status', header: '状态' }
 ]
 
 async function getExportRows() {
@@ -262,25 +259,29 @@ async function getExportRows() {
         <template v-else>
           <UTable :data="pagedRows" :columns="columns">
             <template #orderNo-cell="{ row }">
-              <UButton
-                :label="row.original.orderNo"
-                variant="ghost"
-                color="neutral"
-                class="font-mono -px-2"
-                @click="openOrder(row.original)"
-              />
+              <NuxtLink
+                :to="`/channels/${row.original.channelId}?tab=orders`"
+                class="font-mono text-highlighted hover:text-primary hover:underline transition-colors"
+              >
+                {{ row.original.orderNo }}
+              </NuxtLink>
             </template>
             <template #external-cell="{ row }">
               <span class="font-mono text-xs">{{ row.original.externalOrderNo || '—' }}</span>
             </template>
             <template #channel-cell="{ row }">
-              {{ channelName[row.original.channelId] ?? row.original.channelId }}
+              <NuxtLink
+                :to="`/channels/${row.original.channelId}`"
+                class="text-highlighted hover:text-primary hover:underline transition-colors"
+              >
+                {{ channelName[row.original.channelId] ?? row.original.channelId }}
+              </NuxtLink>
             </template>
             <template #media-cell="{ row }">
               {{ mediaName[row.original.mediaId] ?? row.original.mediaId }}
             </template>
             <template #status-cell="{ row }">
-              <UBadge :label="row.original.status" variant="subtle" size="xs" />
+              <UBadge :label="labelOf(ORDER_STATUS_LABEL, row.original.status)" variant="subtle" size="xs" />
             </template>
           </UTable>
           <div class="flex justify-end">

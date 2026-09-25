@@ -18,7 +18,7 @@ const emit = defineEmits<{
 
 const columns: TableColumn<MediaPlatform>[] = [
   { accessorKey: 'name', header: '名称' },
-  { accessorKey: 'code', header: 'Code' },
+  { accessorKey: 'code', header: '编码' },
   { accessorKey: 'status', header: '状态' },
   { id: 'typeCount', header: '类型数' },
   { id: 'actions', header: '操作' }

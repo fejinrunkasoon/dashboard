@@ -34,6 +34,7 @@ import {
 } from '../../utils/spend-aggregation'
 import { channelSettlementService } from '../settlement/mock'
 import { alertService } from '../alerts/mock'
+import { assertCanReviewPaymentAddressByMemberId } from '../access/mock'
 import { buildChannelOwnershipFundSummaries } from './fund-pool'
 import {
   getBalanceThreshold as readBalanceThreshold,
@@ -187,16 +188,6 @@ function requireAddress(id: string): ChannelPaymentAddress {
   const row = channelPaymentAddresses.find(item => item.id === id)
   if (!row) throw new Error(`Unknown payment address: ${id}`)
   return row
-}
-
-function requireTeamLeader(teamId: string, actorMemberId: string) {
-  const team = teams.find(item => item.id === teamId)
-  if (!team) throw new Error(`Unknown team: ${teamId}`)
-  if (!team.leaderMemberId) throw new Error(`Team ${teamId} has no leader`)
-  if (team.leaderMemberId !== actorMemberId) {
-    throw new Error('Only the approver team leader can review this payment address')
-  }
-  return team
 }
 
 function requireFinanceOperator(actorMemberId: string) {
@@ -514,7 +505,7 @@ export const channelService: ChannelService = {
     if (row.status !== 'PENDING_APPROVAL') {
       throw new Error(`Cannot approve address in status ${row.status}`)
     }
-    requireTeamLeader(row.approverTeamId, input.actorMemberId)
+    assertCanReviewPaymentAddressByMemberId(input.actorMemberId)
     const ts = writeTimestamp()
     row.status = 'ACTIVE'
     row.reviewedByMemberId = input.actorMemberId
@@ -529,7 +520,7 @@ export const channelService: ChannelService = {
     if (row.status !== 'PENDING_APPROVAL') {
       throw new Error(`Cannot reject address in status ${row.status}`)
     }
-    requireTeamLeader(row.approverTeamId, input.actorMemberId)
+    assertCanReviewPaymentAddressByMemberId(input.actorMemberId)
     const ts = writeTimestamp()
     row.status = 'REJECTED'
     row.reviewedByMemberId = input.actorMemberId

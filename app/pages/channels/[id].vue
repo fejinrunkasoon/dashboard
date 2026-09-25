@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
+import { ORDER_STATUS_LABEL, RECONCILIATION_STATUS_LABEL, labelOf } from '~/utils/labels'
 import type {
   AccountMonthlySettlement,
   AdAccountListItem,
@@ -34,6 +35,8 @@ const FINANCE_ACTOR = 'mem-lisi'
 
 const route = useRoute()
 const toast = useToast()
+const { refreshOpenAlertCount } = useDashboard()
+const { member, canReviewPaymentAddress } = useCurrentUser()
 
 const channelId = computed(() => String(route.params.id ?? ''))
 
@@ -65,14 +68,14 @@ const policyCodeById = computed(() =>
 )
 
 const tabs = [
-  { label: 'Overview', value: 'overview' },
-  { label: 'Account Orders', value: 'orders' },
-  { label: 'Accounts', value: 'accounts' },
-  { label: 'Media Assets', value: 'assets' },
+  { label: '概览', value: 'overview' },
+  { label: '账户订单', value: 'orders' },
+  { label: '账户', value: 'accounts' },
+  { label: '媒体资产', value: 'assets' },
   { label: '质量', value: 'quality' },
-  { label: 'Finance', value: 'finance' },
-  { label: 'Reconciliation', value: 'reconciliation' },
-  { label: 'Profile', value: 'profile' }
+  { label: '财务', value: 'finance' },
+  { label: '对账', value: 'reconciliation' },
+  { label: '资料', value: 'profile' }
 ]
 
 const activeTab = ref('overview')
@@ -125,9 +128,9 @@ const qualityPending = ref(false)
 const qualityResult = ref<QualityPivotResult | null>(null)
 
 const qualityGroupOptions: { label: string, value: QualityGroupBy }[] = [
-  { label: 'Media', value: 'media' },
-  { label: 'Timezone', value: 'timezone' },
-  { label: 'Asset Status', value: 'assetStatus' }
+  { label: '媒体', value: 'media' },
+  { label: '时区', value: 'timezone' },
+  { label: '资产状态', value: 'assetStatus' }
 ]
 
 async function loadQuality() {
@@ -383,7 +386,7 @@ async function saveAddress() {
     showAddressModal.value = false
     toast.add({
       title: editingAddress.value ? '地址已提交变更' : '地址已提交',
-      description: '状态为 PENDING_APPROVAL，待团队负责人审核',
+      description: '状态为 PENDING_APPROVAL，待组织管理员或平台管理员审核',
       icon: 'i-lucide-check',
       color: 'success'
     })
@@ -394,13 +397,12 @@ async function saveAddress() {
 }
 
 async function approveAddress(row: ChannelPaymentAddress) {
-  const leaderId = teamOptions.value.find(item => item.value === row.approverTeamId)?.leaderMemberId
-  if (!leaderId) {
-    toastError('审核失败', new Error('审核团队未配置负责人'))
+  if (!canReviewPaymentAddress.value || !member.value) {
+    toastError('审核失败', new Error('仅组织管理员或平台管理员可审批打款地址'))
     return
   }
   try {
-    await channelService.approvePaymentAddress(row.id, { actorMemberId: leaderId })
+    await channelService.approvePaymentAddress(row.id, { actorMemberId: member.value.id })
     toast.add({ title: '地址已通过', icon: 'i-lucide-check', color: 'success' })
     await reloadFinanceSlices()
   } catch (error) {
@@ -409,14 +411,13 @@ async function approveAddress(row: ChannelPaymentAddress) {
 }
 
 async function rejectAddress(row: ChannelPaymentAddress) {
-  const leaderId = teamOptions.value.find(item => item.value === row.approverTeamId)?.leaderMemberId
-  if (!leaderId) {
-    toastError('审核失败', new Error('审核团队未配置负责人'))
+  if (!canReviewPaymentAddress.value || !member.value) {
+    toastError('审核失败', new Error('仅组织管理员或平台管理员可审批打款地址'))
     return
   }
   try {
     await channelService.rejectPaymentAddress(row.id, {
-      actorMemberId: leaderId,
+      actorMemberId: member.value.id,
       note: 'Mock reject'
     })
     toast.add({ title: '地址已驳回', icon: 'i-lucide-check', color: 'success' })
@@ -569,6 +570,7 @@ async function saveBalanceThreshold(patch: Partial<ChannelBalanceThreshold>) {
       severity: patch.severity ?? 'WARNING'
     })
     fundSummaries.value = await channelService.getOwnershipFundSummaries(channelId.value)
+    await refreshOpenAlertCount()
     toast.add({ title: '余额阈值已保存', icon: 'i-lucide-check', color: 'success' })
   } catch (error) {
     toastError('保存阈值失败', error)
@@ -647,7 +649,7 @@ function openDelivery(order: ChannelAccountOrder) {
 function onDelivered(payload: { orderId: string; accountIds: string[]; count: number }) {
   toast.add({
     title: '交付已入库',
-    description: `${payload.count} 户进入账户池（AVAILABLE），可回调度 Allocate`,
+    description: `${payload.count} 户进入账户池（可用），可回调度分配`,
     icon: 'i-lucide-check',
     color: 'success'
   })
@@ -721,8 +723,8 @@ async function copyOrderSummary(order: ChannelAccountOrder) {
     `Media: ${mediaName}`,
     `Quantity: ${order.requestedQuantity}`,
     `Delivered: ${order.deliveredQuantity}`,
-    `Timezone: ${order.timezone ?? '—'}`,
-    `Related Demand Item: ${order.relatedDemandItemId ?? '—'}`,
+    `时区：${order.timezone ?? '—'}`,
+    `关联需求明细：${order.relatedDemandItemId ?? '—'}`,
     `Status: ${order.status}`,
     `Requirements: ${JSON.stringify(order.requirements)}`,
     `Requested At: ${order.requestedAt}`
@@ -804,30 +806,30 @@ function canManualDelivery(status: ChannelAccountOrder['status']) {
 }
 
 const orderColumns: TableColumn<ChannelAccountOrder>[] = [
-  { accessorKey: 'orderNo', header: 'Order No' },
+  { accessorKey: 'orderNo', header: '订单号' },
   { id: 'external', header: '外部单号' },
-  { id: 'media', header: 'Media' },
-  { accessorKey: 'requestedQuantity', header: 'Requested' },
-  { accessorKey: 'deliveredQuantity', header: 'Delivered' },
-  { accessorKey: 'status', header: 'Status' },
+  { id: 'media', header: '媒体' },
+  { accessorKey: 'requestedQuantity', header: '需求量' },
+  { accessorKey: 'deliveredQuantity', header: '已交付' },
+  { accessorKey: 'status', header: '状态' },
   { id: 'reminder', header: '续交提醒' },
-  { accessorKey: 'requestedAt', header: 'Requested At' },
-  { id: 'actions', header: 'Actions' }
+  { accessorKey: 'requestedAt', header: '申请时间' },
+  { id: 'actions', header: '操作' }
 ]
 
 const accountColumns: TableColumn<AdAccountListItem>[] = [
-  { accessorKey: 'externalAccountId', header: 'Account' },
-  { id: 'media', header: 'Media' },
-  { accessorKey: 'assetStatus', header: 'Asset' },
-  { accessorKey: 'mediaStatus', header: 'Media Status' },
+  { accessorKey: 'externalAccountId', header: '账户' },
+  { id: 'media', header: '媒体' },
+  { accessorKey: 'assetStatus', header: '资产' },
+  { accessorKey: 'mediaStatus', header: '媒体状态' },
   { id: 'spend7d', header: '7D' }
 ]
 
 const assetColumns: TableColumn<PlatformAsset>[] = [
-  { id: 'type', header: 'Type' },
-  { accessorKey: 'externalId', header: 'External ID' },
-  { accessorKey: 'name', header: 'Name' },
-  { accessorKey: 'status', header: 'Status' }
+  { id: 'type', header: '类型' },
+  { accessorKey: 'externalId', header: '外部 ID' },
+  { accessorKey: 'name', header: '名称' },
+  { accessorKey: 'status', header: '状态' }
 ]
 
 const reconColumns: TableColumn<ChannelReconciliation>[] = [
@@ -836,7 +838,7 @@ const reconColumns: TableColumn<ChannelReconciliation>[] = [
   { id: 'system', header: '系统消耗' },
   { id: 'variance', header: '差额' },
   { id: 'rate', header: '差异率' },
-  { accessorKey: 'status', header: 'Status' },
+  { accessorKey: 'status', header: '状态' },
   { id: 'actions', header: '' }
 ]
 </script>
@@ -914,7 +916,7 @@ const reconColumns: TableColumn<ChannelReconciliation>[] = [
           <template v-else-if="activeTab === 'orders'">
             <div class="flex items-center justify-between gap-2 flex-wrap">
               <p class="text-xs text-muted">
-                Mock TG：询单 → 接单/拒单 → Reply → Parser 草稿 → 人工确认入库。入库 ≠ Allocate。
+                模拟 Telegram：询单 → 接单/拒单 → 回复 → 解析草稿 → 人工确认入库。入库不等于分配。
               </p>
               <UButton
                 label="新建订单"
@@ -932,7 +934,7 @@ const reconColumns: TableColumn<ChannelReconciliation>[] = [
                 {{ mediaNameById[row.original.mediaId] ?? row.original.mediaId }}
               </template>
               <template #status-cell="{ row }">
-                <UBadge :label="row.original.status" variant="subtle" size="xs" />
+                <UBadge :label="labelOf(ORDER_STATUS_LABEL, row.original.status)" variant="subtle" size="xs" />
               </template>
               <template #reminder-cell="{ row }">
                 <div
@@ -1068,13 +1070,12 @@ const reconColumns: TableColumn<ChannelReconciliation>[] = [
             </div>
             <UTable v-if="accounts.length" :data="accounts" :columns="accountColumns">
               <template #externalAccountId-cell="{ row }">
-                <UButton
-                  :label="row.original.externalAccountId"
-                  variant="ghost"
-                  color="neutral"
-                  class="font-mono -px-2"
+                <NuxtLink
                   :to="`/accounts/${row.original.id}`"
-                />
+                  class="font-mono text-sm text-highlighted hover:text-primary hover:underline transition-colors"
+                >
+                  {{ row.original.externalAccountId }}
+                </NuxtLink>
               </template>
               <template #media-cell="{ row }">
                 {{ row.original.media.name }}
@@ -1105,7 +1106,7 @@ const reconColumns: TableColumn<ChannelReconciliation>[] = [
           <template v-else-if="activeTab === 'quality'">
             <div class="space-y-3">
               <p class="text-xs text-muted">
-                本渠质量切片（与账户分析同一聚合 API）。Spend = Media Spend only。
+                本渠质量切片（与账户分析同一聚合接口）。消耗仅为媒体消耗。
               </p>
               <div class="flex flex-wrap items-center gap-3">
                 <FiltersQuickFilter
@@ -1149,6 +1150,7 @@ const reconColumns: TableColumn<ChannelReconciliation>[] = [
               :tiers-by-policy-id="tiersByPolicyId"
               :policy-code-by-id="policyCodeById"
               :can-pay="activeAddresses.length > 0"
+              :can-review-address="canReviewPaymentAddress"
               :fund-summaries="fundSummaries"
               :balance-threshold="balanceThreshold"
               @pay="openPayModal"
@@ -1173,7 +1175,7 @@ const reconColumns: TableColumn<ChannelReconciliation>[] = [
                 <div>
                   <p class="text-sm font-medium text-highlighted">渠道对账</p>
                   <p class="text-xs text-muted">
-                    渠道账单 Media Spend vs 系统月结 Media Spend。差异率超过 5% 会写预警。无账本余额。
+                    渠道账单媒体消耗 vs 系统月结媒体消耗。差异率超过 5% 会写预警。无账本余额。
                   </p>
                 </div>
                 <UButton
@@ -1205,7 +1207,7 @@ const reconColumns: TableColumn<ChannelReconciliation>[] = [
                   }}
                 </template>
                 <template #status-cell="{ row }">
-                  <UBadge :label="row.original.status" variant="subtle" size="xs" />
+                  <UBadge :label="labelOf(RECONCILIATION_STATUS_LABEL, row.original.status)" variant="subtle" size="xs" />
                 </template>
                 <template #actions-cell="{ row }">
                   <UButton
@@ -1244,7 +1246,7 @@ const reconColumns: TableColumn<ChannelReconciliation>[] = [
                 <span class="font-mono">{{ detail.channel.code }}</span>
               </p>
               <p>
-                <span class="text-muted">Status：</span>
+                <span class="text-muted">状态：</span>
                 {{ detail.channel.status }}
               </p>
               <p>
@@ -1301,7 +1303,7 @@ const reconColumns: TableColumn<ChannelReconciliation>[] = [
                 :items="addressOptions"
                 value-key="value"
                 label-key="label"
-                placeholder="选择 ACTIVE 地址"
+                placeholder="选择启用中的地址"
               />
             </UFormField>
 
@@ -1357,8 +1359,8 @@ const reconColumns: TableColumn<ChannelReconciliation>[] = [
               <USelectMenu
                 v-model="addressType"
                 :items="[
-                  { label: 'CRYPTO', value: 'CRYPTO' },
-                  { label: 'FIAT', value: 'FIAT' }
+                  { label: '加密货币', value: 'CRYPTO' },
+                  { label: '法币', value: 'FIAT' }
                 ]"
                 value-key="value"
                 label-key="label"
@@ -1370,17 +1372,17 @@ const reconColumns: TableColumn<ChannelReconciliation>[] = [
             <UFormField label="地址 / 收款信息" required>
               <UTextarea v-model="addressPayload" :rows="2" autoresize />
             </UFormField>
-            <UFormField label="审核团队" required>
+            <UFormField label="关联团队" required>
               <USelectMenu
                 v-model="addressApproverTeamId"
                 :items="teamOptions"
                 value-key="value"
                 label-key="label"
-                placeholder="选择团队负责人所属团队"
+                placeholder="选择关联团队"
               />
             </UFormField>
             <p class="text-xs text-muted">
-              提交后进入 PENDING_APPROVAL。通过/驳回由该审核团队的负责人操作（Mock 自动取 leaderMemberId）。
+              提交后进入 PENDING_APPROVAL。通过/驳回仅组织管理员或平台管理员可操作。
             </p>
           </div>
           <template #footer>
@@ -1405,16 +1407,16 @@ const reconColumns: TableColumn<ChannelReconciliation>[] = [
             <span class="font-semibold">{{ editingPolicy ? '编辑服务费政策' : '新建服务费政策' }}</span>
           </template>
           <div class="space-y-4">
-            <UFormField v-if="!editingPolicy" label="Code" required>
+            <UFormField v-if="!editingPolicy" label="编码" required>
               <UInput v-model="policyCode" placeholder="ALPHA_NEW" />
             </UFormField>
-            <UFormField label="Name" required>
+            <UFormField label="名称" required>
               <UInput v-model="policyName" />
             </UFormField>
             <UFormField label="备注">
               <UInput v-model="policyNote" />
             </UFormField>
-            <UFormField label="Tiers（每行：min,max,rate%；末档 max 可空）" required>
+            <UFormField label="阶梯（每行：min,max,rate%；末档 max 可空）" required>
               <UTextarea v-model="policyTiersText" :rows="4" autoresize class="font-mono text-xs" />
             </UFormField>
           </div>
@@ -1475,9 +1477,9 @@ const reconColumns: TableColumn<ChannelReconciliation>[] = [
           </template>
           <div class="space-y-4">
             <p class="text-xs text-muted">
-              系统 Media Spend：{{ formatCurrency(settlementSummary?.mediaSpend ?? 0) }}
+              系统媒体消耗：{{ formatCurrency(settlementSummary?.mediaSpend ?? 0) }}
             </p>
-            <UFormField label="渠道账单 Media Spend (USD)" required>
+            <UFormField label="渠道账单媒体消耗 (USD)" required>
               <UInput v-model.number="reconBillSpend" type="number" min="0" step="100" />
             </UFormField>
             <UFormField label="差异备注">

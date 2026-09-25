@@ -24,6 +24,7 @@ import { MOCK_TODAY, shiftDate } from '~/utils/spend-aggregation'
 
 const route = useRoute()
 const toast = useToast()
+const { userId: viewerUserId, member: currentMember } = useCurrentUser()
 
 const teamId = computed(() => String(route.params.id ?? ''))
 
@@ -43,11 +44,11 @@ const mediaNameById = ref<Record<string, string>>({})
 const productNameById = ref<Record<string, string>>({})
 
 const tabs = [
-  { label: 'Overview', value: 'overview' },
-  { label: 'Accounts', value: 'accounts' },
-  { label: 'Members', value: 'members' },
-  { label: 'Product Performance', value: 'products' },
-  { label: 'Account Demand', value: 'demands' },
+  { label: '概览', value: 'overview' },
+  { label: '账户', value: 'accounts' },
+  { label: '成员', value: 'members' },
+  { label: '产品表现', value: 'products' },
+  { label: '账户需求', value: 'demands' },
   { label: '质量', value: 'quality' }
 ]
 
@@ -61,8 +62,8 @@ const qualityPending = ref(false)
 const qualityResult = ref<QualityPivotResult | null>(null)
 
 const qualityGroupOptions: { label: string, value: QualityGroupBy }[] = [
-  { label: 'Member', value: 'member' },
-  { label: 'Product', value: 'product' }
+  { label: '成员', value: 'member' },
+  { label: '产品', value: 'product' }
 ]
 
 async function loadQuality() {
@@ -98,7 +99,12 @@ async function loadLookups() {
     productService.getProducts()
   ])
   mediaNameById.value = Object.fromEntries(medias.map(item => [item.id, item.name]))
-  productNameById.value = Object.fromEntries(products.map(item => [item.id, item.name]))
+  productNameById.value = Object.fromEntries(
+    products.map(item => [
+      item.id,
+      item.ownershipType === 'EXTERNAL' ? '外接' : '自家'
+    ])
+  )
 }
 
 async function load() {
@@ -115,7 +121,12 @@ async function load() {
     useSeoMeta({ title: `${bundle.team.name} · 团队详情` })
 
     const [accountPage, members, products, demands] = await Promise.all([
-      accountService.getAccounts({ teamIds: [teamId.value], page: 1, pageSize: 100 }),
+      accountService.getAccounts({
+        teamIds: [teamId.value],
+        page: 1,
+        pageSize: 100,
+        viewerUserId: viewerUserId.value
+      }),
       teamService.getTeamMembersWithMetrics(teamId.value),
       teamService.getTeamProductPerformance(teamId.value),
       teamService.getTeamDemands(teamId.value)
@@ -137,6 +148,11 @@ watch(teamId, () => {
   void loadLookups()
   void load()
 }, { immediate: true })
+
+watch(viewerUserId, () => {
+  if (!teamId.value) return
+  void load()
+})
 
 watch(activeTab, (tab) => {
   if (!teamId.value) return
@@ -179,12 +195,17 @@ async function onSubmitDraft(demandId: string) {
 }
 
 async function onApproveDemand(demandId: string) {
-  const actor = detail.value?.team.leaderMemberId
+  const actor = currentMember.value?.id
   if (!actor) {
+    toast.add({ title: '未登录成员，不能审批', color: 'error', icon: 'i-lucide-alert-circle' })
+    return
+  }
+  if (!detail.value?.team.leaderMemberId) {
     toast.add({ title: '该团队没有负责人，不能审批', color: 'error', icon: 'i-lucide-alert-circle' })
     return
   }
   try {
+    // Pass real actor — mock assertTeamLeader rejects non-leaders
     const demand = await demandService.approveDemand(demandId, actor)
     toast.add({
       title: '需求已通过',
@@ -204,8 +225,12 @@ async function onApproveDemand(demandId: string) {
 }
 
 async function onRejectDemand(demandId: string) {
-  const actor = detail.value?.team.leaderMemberId
+  const actor = currentMember.value?.id
   if (!actor) {
+    toast.add({ title: '未登录成员，不能审批', color: 'error', icon: 'i-lucide-alert-circle' })
+    return
+  }
+  if (!detail.value?.team.leaderMemberId) {
     toast.add({ title: '该团队没有负责人，不能审批', color: 'error', icon: 'i-lucide-alert-circle' })
     return
   }
@@ -274,8 +299,8 @@ async function onDemandSaved(payload: { demandId: string; submitted: boolean }) 
   toast.add({
     title: payload.submitted ? '申请已提交' : '草稿已保存',
     description: payload.submitted
-      ? 'Demand 已进入 SUBMITTED，等待后续调度。'
-      : '可在 Account Demand Tab 继续编辑或提交。',
+      ? '需求已提交，等待后续调度。'
+      : '可在「账户需求」页签继续编辑或提交。',
     icon: 'i-lucide-check',
     color: 'success'
   })
@@ -316,17 +341,17 @@ const accountColumns: TableColumn<AdAccountListItem>[] = [
   { id: 'product', header: '产品' },
   { accessorKey: 'assetStatus', header: '资产状态' },
   { accessorKey: 'mediaStatus', header: '媒体状态' },
-  { id: 'todaySpend', header: 'Today' },
+  { id: 'todaySpend', header: '今日' },
   { id: 'spend7d', header: '7D' }
 ]
 
 const memberColumns: TableColumn<TeamMemberListItem>[] = [
   { accessorKey: 'name', header: '成员' },
-  { accessorKey: 'accounts', header: 'Accounts' },
-  { accessorKey: 'inUse', header: 'In Use' },
-  { accessorKey: 'idle', header: 'Idle' },
-  { id: 'usageRate', header: 'Usage Rate' },
-  { id: 'todaySpend', header: 'Today' },
+  { accessorKey: 'accounts', header: '账户' },
+  { accessorKey: 'inUse', header: '使用中' },
+  { accessorKey: 'idle', header: '闲置' },
+  { id: 'usageRate', header: '使用率' },
+  { id: 'todaySpend', header: '今日' },
   { id: 'spend7d', header: '7D' }
 ]
 
@@ -334,19 +359,19 @@ const productColumns: TableColumn<TeamProductPerformanceItem>[] = [
   { accessorKey: 'productName', header: '产品' },
   { id: 'ownershipType', header: '归属' },
   { accessorKey: 'accountCount', header: '账户数' },
-  { id: 'spend7d', header: '7D Spend' },
-  { id: 'spend30d', header: '30D Spend' }
+  { id: 'spend7d', header: '7日消耗' },
+  { id: 'spend30d', header: '30日消耗' }
 ]
 
 const demandColumns: TableColumn<TeamDemandListItem>[] = [
-  { accessorKey: 'demandNo', header: 'Demand No' },
-  { id: 'status', header: 'Status' },
-  { accessorKey: 'priority', header: 'Priority' },
-  { id: 'expectedDate', header: 'Expected' },
-  { accessorKey: 'requestedQuantity', header: 'Requested' },
-  { accessorKey: 'allocatedQuantity', header: 'Allocated' },
-  { id: 'unfulfilledQuantity', header: 'Gap' },
-  { id: 'reason', header: 'Reason' },
+  { accessorKey: 'demandNo', header: '需求号' },
+  { id: 'status', header: '状态' },
+  { accessorKey: 'priority', header: '优先级' },
+  { id: 'expectedDate', header: '期望日期' },
+  { accessorKey: 'requestedQuantity', header: '需求量' },
+  { accessorKey: 'allocatedQuantity', header: '已分配' },
+  { id: 'unfulfilledQuantity', header: '缺口' },
+  { id: 'reason', header: '原因' },
   { id: 'actions', header: '操作' }
 ]
 
@@ -485,17 +510,16 @@ function demandCell(row: Row<TeamDemandListItem>) {
               description="打开账户详情 → Assignment 标签，可为成员分配 / 取消访问权限。Team Manager 可见本团队全部账户；Member 仅见自己接入或被分配的账户。"
             />
             <div v-if="!accounts.length" class="text-sm text-muted py-8 text-center">
-              该团队当前无归属账户
+              暂无你可见的账户（Member 仅见自己接入或被分配的账户）
             </div>
             <UTable v-else :data="accounts" :columns="accountColumns">
               <template #externalAccountId-cell="{ row }">
-                <UButton
-                  :label="accountCell(row).externalAccountId"
-                  variant="ghost"
-                  color="neutral"
-                  class="font-mono text-sm -px-2 -py-1"
+                <NuxtLink
                   :to="`/accounts/${accountCell(row).id}`"
-                />
+                  class="font-mono text-sm text-highlighted hover:text-primary hover:underline transition-colors"
+                >
+                  {{ accountCell(row).externalAccountId }}
+                </NuxtLink>
               </template>
               <template #media-cell="{ row }">
                 <UBadge :label="accountCell(row).media.name" variant="subtle" color="neutral" size="xs" />
@@ -591,7 +615,7 @@ function demandCell(row: Row<TeamDemandListItem>) {
           <template v-else-if="activeTab === 'quality'">
             <div class="space-y-3">
               <p class="text-xs text-muted">
-                本团质量切片（与账户分析同一聚合 API）。Spend = Media Spend only。
+                本团质量切片（与账户分析同一聚合接口）。消耗仅为媒体消耗。
               </p>
               <div class="flex flex-wrap items-center gap-3">
                 <FiltersQuickFilter

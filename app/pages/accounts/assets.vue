@@ -2,6 +2,7 @@
 import type { TableColumn } from '@nuxt/ui'
 import type { Row } from '@tanstack/table-core'
 import type { PlatformAssetListItem, PlatformAssetQuery } from '~/services'
+import { ENTITY_STATUS_LABEL, labelOf } from '~/utils/labels'
 import { channelService, mediaService } from '~/services'
 
 useSeoMeta({ title: '媒体资产' })
@@ -26,9 +27,9 @@ const channelFilterOptions = [
 
 const statusFilterOptions = [
   { label: '全部状态', value: 'all' },
-  { label: 'ACTIVE', value: 'ACTIVE' },
-  { label: 'DISABLED', value: 'DISABLED' },
-  { label: 'ARCHIVED', value: 'ARCHIVED' }
+  { label: '启用', value: 'ACTIVE' },
+  { label: '停用', value: 'DISABLED' },
+  { label: '归档', value: 'ARCHIVED' }
 ]
 
 const typeFilterOptions = [
@@ -243,14 +244,14 @@ function viewAccounts(asset: PlatformAssetListItem) {
 }
 
 const columns: TableColumn<PlatformAssetListItem>[] = [
-  { accessorKey: 'mediaName', header: 'Media' },
-  { accessorKey: 'typeName', header: 'Type' },
-  { accessorKey: 'externalId', header: 'External ID' },
-  { accessorKey: 'name', header: 'Name' },
-  { accessorKey: 'channelName', header: 'Channel' },
-  { accessorKey: 'status', header: 'Status' },
-  { accessorKey: 'linkedAccountCount', header: 'Linked Accounts' },
-  { id: 'actions', header: 'Actions' }
+  { accessorKey: 'mediaName', header: '媒体' },
+  { accessorKey: 'typeName', header: '类型' },
+  { accessorKey: 'externalId', header: '外部 ID' },
+  { accessorKey: 'name', header: '名称' },
+  { accessorKey: 'channelName', header: '渠道' },
+  { accessorKey: 'status', header: '状态' },
+  { accessorKey: 'linkedAccountCount', header: '关联账户' },
+  { id: 'actions', header: '操作' }
 ]
 
 function cell(row: Row<PlatformAssetListItem>): PlatformAssetListItem {
@@ -258,13 +259,13 @@ function cell(row: Row<PlatformAssetListItem>): PlatformAssetListItem {
 }
 
 const exportColumns = [
-  { key: 'mediaName', header: 'Media' },
-  { key: 'typeName', header: 'Type' },
-  { key: 'externalId', header: 'External ID' },
-  { key: 'name', header: 'Name' },
-  { key: 'channelName', header: 'Channel' },
-  { key: 'status', header: 'Status' },
-  { key: 'linkedAccountCount', header: 'Linked Accounts' }
+  { key: 'mediaName', header: '媒体' },
+  { key: 'typeName', header: '类型' },
+  { key: 'externalId', header: '外部 ID' },
+  { key: 'name', header: '名称' },
+  { key: 'channelName', header: '渠道' },
+  { key: 'status', header: '状态' },
+  { key: 'linkedAccountCount', header: '关联账户' }
 ]
 
 async function getExportRows() {
@@ -297,7 +298,7 @@ const hasActiveFilters = computed(() => activeChips.value.length > 0)
         <template #right>
           <FiltersEntitySearch
             v-model="keyword"
-            placeholder="搜索 External ID / 名称"
+            placeholder="搜索外部 ID / 名称"
             class="w-48 lg:w-64"
           />
           <UButton
@@ -394,7 +395,7 @@ const hasActiveFilters = computed(() => activeChips.value.length > 0)
             </template>
 
             <template #status-cell="{ row }">
-              <UBadge :label="cell(row).status" variant="subtle" size="xs" />
+              <UBadge :label="labelOf(ENTITY_STATUS_LABEL, cell(row).status)" variant="subtle" size="xs" />
             </template>
 
             <template #linkedAccountCount-cell="{ row }">

@@ -13,6 +13,11 @@ const emit = defineEmits<{
   reauth: [connectionId: string]
 }>()
 
+const { isOrgAdmin, isPlatformAdmin } = useCurrentUser()
+
+/** Can open /settings 媒体平台开通 and configure PlatformApp. */
+const canConfigureApps = computed(() => isOrgAdmin.value || isPlatformAdmin.value)
+
 function statusColor(status: string) {
   if (status === 'ACTIVE' || status === 'MOCK') return 'success'
   if (status === 'REAUTH_REQUIRED' || status === 'EXPIRED') return 'warning'
@@ -34,11 +39,22 @@ function canConnect(platformId: string) {
   return Boolean(info?.platformEnabled && info.appConfigured)
 }
 
+/** Unconfigured / disabled media that should link to /settings. */
+function needsSetup(platformId: string) {
+  const info = infoFor(platformId)
+  if (!info) return true
+  return !info.platformEnabled || !info.appConfigured
+}
+
 function disableReason(platformId: string) {
   const info = infoFor(platformId)
-  if (!info) return '未开通'
-  if (!info.platformEnabled) return '媒体已停用'
-  if (!info.appConfigured) return '管理员尚未配置 App'
+  if (!info) return canConfigureApps.value ? '尚未开通，请先配置 App' : '未开通'
+  if (!info.platformEnabled) {
+    return canConfigureApps.value ? '媒体已停用，请先在系统管理启用' : '媒体已停用'
+  }
+  if (!info.appConfigured) {
+    return canConfigureApps.value ? '尚未配置 App，请先开通' : '管理员尚未配置 App'
+  }
   return ''
 }
 </script>
@@ -59,6 +75,15 @@ function disableReason(platformId: string) {
           <p class="text-sm text-muted mt-0.5">
             <template v-if="summary.connectionCount === 0">
               {{ canConnect(summary.platformId) ? '未连接' : disableReason(summary.platformId) }}
+              <template v-if="!canConnect(summary.platformId) && needsSetup(summary.platformId)">
+                ·
+                <NuxtLink
+                  to="/settings"
+                  class="text-primary underline underline-offset-2"
+                >
+                  {{ canConfigureApps ? '去开通' : '媒体平台开通' }}
+                </NuxtLink>
+              </template>
             </template>
             <template v-else>
               {{ summary.connectionCount }} 个连接 · {{ summary.accountCount }} 个广告账户
@@ -72,12 +97,29 @@ function disableReason(platformId: string) {
           </p>
         </div>
         <UButton
+          v-if="canConnect(summary.platformId)"
           size="sm"
           color="primary"
           :label="summary.connectionCount === 0 ? `连接 ${summary.platformName}` : '添加连接'"
           icon="i-lucide-plus"
-          :disabled="!canConnect(summary.platformId)"
           @click="emit('add', summary.platformId)"
+        />
+        <UButton
+          v-else-if="canConfigureApps && needsSetup(summary.platformId)"
+          size="sm"
+          color="primary"
+          variant="soft"
+          label="去开通"
+          icon="i-lucide-settings"
+          to="/settings"
+        />
+        <UButton
+          v-else
+          size="sm"
+          color="primary"
+          :label="summary.connectionCount === 0 ? `连接 ${summary.platformName}` : '添加连接'"
+          icon="i-lucide-plus"
+          disabled
         />
       </div>
 

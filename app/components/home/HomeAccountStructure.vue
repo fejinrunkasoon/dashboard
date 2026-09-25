@@ -37,7 +37,7 @@ const items = computed(() => {
     <template #header>
       <div class="flex items-center justify-between gap-2">
         <p class="text-xs text-muted uppercase">
-          账户资源结构
+          账户资源结构（当前存量）
         </p>
         <UButton
           to="/accounts"

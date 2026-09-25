@@ -52,6 +52,8 @@ export interface AllocateDemandInput {
   memberId: string
   managerId: string
   reason?: string | null
+  /** AppUser id — must pass canAllocateAccounts (not TEAM_MEMBER). */
+  actorUserId: string
 }
 
 export interface CancelDemandResult {

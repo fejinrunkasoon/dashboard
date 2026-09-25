@@ -43,7 +43,7 @@ const mediaNameById = computed(() => {
 
 const columns: TableColumn<Channel>[] = [
   { accessorKey: 'name', header: '名称' },
-  { accessorKey: 'code', header: 'Code' },
+  { accessorKey: 'code', header: '编码' },
   { id: 'media', header: '支持媒体' },
   { accessorKey: 'contactName', header: '联系人' },
   { accessorKey: 'status', header: '状态' },

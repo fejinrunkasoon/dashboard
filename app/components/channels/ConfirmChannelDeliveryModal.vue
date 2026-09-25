@@ -158,7 +158,7 @@ async function submit() {
                 确认交付入库
               </p>
               <p v-if="order" class="text-xs text-muted">
-                {{ order.orderNo }} · 本单还可计入 {{ remaining }} 户。超出部分仍以 AVAILABLE 入池，不计入本 Demand。
+                {{ order.orderNo }} · 本单还可计入 {{ remaining }} 户。超出部分仍以可用状态入池，不计入本需求。
               </p>
               <p v-if="member" class="text-[11px] text-muted mt-0.5">
                 户管将记为操作人：{{ member.name }}
@@ -186,17 +186,17 @@ async function submit() {
                 @click="removeRow(index)"
               />
             </div>
-            <UFormField label="External Account ID" required>
+            <UFormField label="外部账户 ID" required>
               <UInput
                 v-model="row.externalAccountId"
                 placeholder="如 act_123456"
                 class="font-mono"
               />
             </UFormField>
-            <UFormField label="Name">
+            <UFormField label="名称">
               <UInput v-model="row.name" placeholder="可选名称" />
             </UFormField>
-            <UFormField label="Timezone">
+            <UFormField label="时区">
               <USelectMenu
                 v-model="row.timezone"
                 :items="timezoneOptions"
@@ -207,7 +207,7 @@ async function submit() {
                 class="w-full"
               />
             </UFormField>
-            <UFormField label="Product" description="默认来自 Demand，可改">
+            <UFormField label="产品" description="默认来自需求，可改">
               <USelectMenu
                 v-model="row.productId"
                 :items="productOptions"
@@ -218,7 +218,7 @@ async function submit() {
                 class="w-full"
               />
             </UFormField>
-            <UFormField label="Spend Limit" description="账户最高额度，空=不限（仍受渠道共享池约束）">
+            <UFormField label="消耗上限" description="账户最高额度，空=不限（仍受渠道共享池约束）">
               <UInput
                 v-model.number="row.spendLimit"
                 type="number"
@@ -227,7 +227,7 @@ async function submit() {
                 placeholder="可选"
               />
             </UFormField>
-            <UFormField label="Platform Asset">
+            <UFormField label="平台资产">
               <USelectMenu
                 v-model="row.platformAssetId"
                 :items="assetOptions"

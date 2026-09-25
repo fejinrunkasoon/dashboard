@@ -97,7 +97,7 @@ async function onSubmit() {
         </template>
 
         <div class="space-y-4">
-          <UFormField label="Code" required>
+          <UFormField label="编码" required>
             <UInput
               v-model="code"
               :disabled="isEdit"

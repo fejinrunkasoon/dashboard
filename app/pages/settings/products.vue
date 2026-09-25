@@ -48,7 +48,7 @@ const filteredProducts = computed(() => {
 
 const productColumns: TableColumn<ProductListItem>[] = [
   { accessorKey: 'name', header: '名称' },
-  { accessorKey: 'code', header: 'Code' },
+  { accessorKey: 'code', header: '编码' },
   { id: 'customer', header: '客户' },
   { id: 'bound', header: '绑定账户' },
   { accessorKey: 'status', header: '状态' },
@@ -57,7 +57,7 @@ const productColumns: TableColumn<ProductListItem>[] = [
 
 const customerColumns: TableColumn<Customer>[] = [
   { accessorKey: 'name', header: '名称' },
-  { accessorKey: 'code', header: 'Code' },
+  { accessorKey: 'code', header: '编码' },
   { id: 'productCount', header: '产品数' },
   { accessorKey: 'status', header: '状态' },
   { id: 'actions', header: '操作' }

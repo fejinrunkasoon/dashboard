@@ -4,6 +4,7 @@ import { formatCurrency } from '~/utils'
 
 defineProps<{
   kpis: DashboardKpis
+  rangeDays: number
 }>()
 
 function formatRate(value: number): string {
@@ -69,7 +70,7 @@ function formatRate(value: number): string {
 
     <UPageCard
       icon="i-lucide-circle-dollar-sign"
-      title="今日消耗"
+      :title="`${rangeDays}日消耗`"
       to="/accounts"
       variant="subtle"
       :ui="{
@@ -81,7 +82,7 @@ function formatRate(value: number): string {
       class="lg:rounded-none hover:z-1"
     >
       <span class="text-2xl font-semibold text-highlighted">
-        {{ formatCurrency(kpis.todaySpend) }}
+        {{ formatCurrency(kpis.periodSpend) }}
       </span>
     </UPageCard>
 

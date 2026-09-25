@@ -56,7 +56,7 @@ async function onSubmit() {
         </template>
 
         <div class="space-y-4">
-          <UFormField label="Code" required>
+          <UFormField label="编码" required>
             <UInput v-model="code" placeholder="例如：CUSTOM_REASON" class="font-mono" />
           </UFormField>
           <UFormField label="名称" required>

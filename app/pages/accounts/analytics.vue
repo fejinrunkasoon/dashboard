@@ -29,14 +29,14 @@ const members = await teamService.getMembers()
 const products = await productService.getProducts()
 
 const groupByOptions: { label: string, value: QualityGroupBy }[] = [
-  { label: 'Media', value: 'media' },
-  { label: 'Channel', value: 'channel' },
-  { label: 'Timezone', value: 'timezone' },
-  { label: 'Team', value: 'team' },
-  { label: 'Member', value: 'member' },
-  { label: 'Account Manager', value: 'manager' },
-  { label: 'Product', value: 'product' },
-  { label: 'Asset Status', value: 'assetStatus' }
+  { label: '媒体', value: 'media' },
+  { label: '渠道', value: 'channel' },
+  { label: '时区', value: 'timezone' },
+  { label: '团队', value: 'team' },
+  { label: '成员', value: 'member' },
+  { label: '账户经理', value: 'manager' },
+  { label: '产品', value: 'product' },
+  { label: '资产状态', value: 'assetStatus' }
 ]
 
 const mediaFilterOptions = [
@@ -66,12 +66,12 @@ const productFilterOptions = [
 
 const assetStatusOptions = [
   { label: '全部资产状态', value: 'all' },
-  { label: 'AVAILABLE', value: 'AVAILABLE' },
-  { label: 'ASSIGNED', value: 'ASSIGNED' },
-  { label: 'IN_USE', value: 'IN_USE' },
-  { label: 'IDLE', value: 'IDLE' },
-  { label: 'DISABLED', value: 'DISABLED' },
-  { label: 'ARCHIVED', value: 'ARCHIVED' }
+  { label: '可用', value: 'AVAILABLE' },
+  { label: '已分配', value: 'ASSIGNED' },
+  { label: '使用中', value: 'IN_USE' },
+  { label: '闲置', value: 'IDLE' },
+  { label: '停用', value: 'DISABLED' },
+  { label: '归档', value: 'ARCHIVED' }
 ]
 
 const timezoneOptions = [
@@ -328,15 +328,15 @@ function applyPreset(kind: 'channel-ban' | 'media-spend') {
 }
 
 const exportColumns = [
-  { key: 'label', header: 'Dimension' },
-  { key: 'accountCount', header: 'Accounts' },
-  { key: 'activeValidCount', header: 'Active Valid' },
-  { key: 'inUseCount', header: 'In Use' },
-  { key: 'idleCount', header: 'Idle' },
-  { key: 'bannedCount', header: 'Banned' },
-  { key: 'banRate', header: 'Ban Rate' },
-  { key: 'usageRate', header: 'Usage Rate' },
-  { key: 'spend', header: 'Spend' }
+  { key: 'label', header: '维度' },
+  { key: 'accountCount', header: '账户' },
+  { key: 'activeValidCount', header: '有效活跃' },
+  { key: 'inUseCount', header: '使用中' },
+  { key: 'idleCount', header: '闲置' },
+  { key: 'bannedCount', header: '封禁' },
+  { key: 'banRate', header: '封禁率' },
+  { key: 'usageRate', header: '使用率' },
+  { key: 'spend', header: '消耗' }
 ]
 
 async function getExportRows() {
@@ -371,7 +371,7 @@ async function getExportRows() {
           />
           <UBadge
             v-if="result"
-            :label="`Spend ${formatCurrency(result.meta.totalSpend)}`"
+            :label="`消耗 ${formatCurrency(result.meta.totalSpend)}`"
             variant="subtle"
             color="neutral"
           />
@@ -417,14 +417,14 @@ async function getExportRows() {
         <div class="flex flex-wrap items-center gap-2">
           <span class="text-xs text-muted">预置视图</span>
           <UButton
-            label="按渠道 Ban Rate"
+            label="按渠道封禁率"
             size="xs"
             color="neutral"
             variant="soft"
             @click="applyPreset('channel-ban')"
           />
           <UButton
-            label="按媒体 Spend"
+            label="按媒体消耗"
             size="xs"
             color="neutral"
             variant="soft"
@@ -433,7 +433,7 @@ async function getExportRows() {
         </div>
 
         <p class="text-xs text-muted">
-          质量 Pivot：账户为事实粒度；Spend 仅为 Media Spend（不含 Service Fee）。点行「查看账户」下钻全部账户列表。
+          质量透视：账户为事实粒度；消耗仅为媒体消耗（不含服务费）。图表与表格随筛选同步；点击图表或「查看账户」下钻账户列表。
         </p>
 
         <div v-if="errorMessage" class="rounded-lg border border-error/30 bg-error/5 p-4 text-sm text-error">
@@ -441,13 +441,36 @@ async function getExportRows() {
           <UButton class="ms-3" size="xs" variant="soft" label="重试" @click="load" />
         </div>
 
-        <AnalyticsQualityPivotTable
-          v-else
-          :rows="result?.rows ?? []"
-          :group-by="query.groupBy"
-          :pending="pending"
-          :dimension-header="dimensionHeader"
-        />
+        <template v-else>
+          <div class="grid gap-4 lg:grid-cols-2">
+            <AnalyticsQualityBanRateChart
+              :rows="result?.rows ?? []"
+              :group-by="query.groupBy"
+              :dimension-header="dimensionHeader"
+              :pending="pending"
+            />
+            <AnalyticsQualitySpendDistributionChart
+              :rows="result?.rows ?? []"
+              :group-by="query.groupBy"
+              :dimension-header="dimensionHeader"
+              :pending="pending"
+            />
+          </div>
+
+          <AnalyticsQualityAccountStructureChart
+            :rows="result?.rows ?? []"
+            :group-by="query.groupBy"
+            :dimension-header="dimensionHeader"
+            :pending="pending"
+          />
+
+          <AnalyticsQualityPivotTable
+            :rows="result?.rows ?? []"
+            :group-by="query.groupBy"
+            :pending="pending"
+            :dimension-header="dimensionHeader"
+          />
+        </template>
       </div>
     </template>
   </UDashboardPanel>

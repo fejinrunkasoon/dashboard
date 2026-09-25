@@ -56,7 +56,7 @@ export const DEMAND_TIMEZONE_OPTIONS: { label: string; value: string }[] = build
 
 const commonTimezoneField: DemandRequirementFieldDef = {
   key: 'timezone',
-  label: 'Timezone',
+  label: '时区',
   type: 'select',
   required: true,
   options: DEMAND_TIMEZONE_OPTIONS

@@ -35,6 +35,7 @@ import {
 import { MOCK_TODAY } from '../../utils/spend-aggregation'
 import { intakeAdAccount, resolvePlatformAssetByExternalId } from '../accounts/intake'
 import { isInAccountPool } from '../accounts/pool-eligibility'
+import { assertCanAllocateAccounts } from '../access/mock'
 import { alertService } from '../alerts/mock'
 import type {
   AllocateDemandInput,
@@ -650,6 +651,7 @@ export const demandService: DemandService = {
   },
 
   async allocate(input: AllocateDemandInput): Promise<AllocateDemandResult> {
+    assertCanAllocateAccounts(input.actorUserId)
     if (!input.demandItemId) throw new Error('demandItemId is required')
     if (!input.accountIds?.length) throw new Error('accountIds is required')
 

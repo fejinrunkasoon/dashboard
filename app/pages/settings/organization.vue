@@ -31,7 +31,7 @@ const currentOrg = computed(() =>
 )
 const teamColumns: TableColumn<OrgTeamListItem>[] = [
   { accessorKey: 'name', header: '团队' },
-  { accessorKey: 'code', header: 'Code' },
+  { accessorKey: 'code', header: '编码' },
   { id: 'leader', header: '负责人' },
   { accessorKey: 'memberCount', header: '成员数' },
   { accessorKey: 'status', header: '状态' },
@@ -39,7 +39,7 @@ const teamColumns: TableColumn<OrgTeamListItem>[] = [
 ]
 const memberColumns: TableColumn<Member>[] = [
   { accessorKey: 'name', header: '姓名' },
-  { accessorKey: 'code', header: 'Code' },
+  { accessorKey: 'code', header: '编码' },
   { accessorKey: 'status', header: '状态' },
   { id: 'actions', header: '操作' }
 ]
@@ -488,7 +488,7 @@ async function onToggleMemberStatus(member: Member) {
             </span>
           </template>
           <div class="space-y-4">
-            <UFormField label="Code" required>
+            <UFormField label="编码" required>
               <UInput
                 v-model="orgCode"
                 :disabled="Boolean(editingOrg)"

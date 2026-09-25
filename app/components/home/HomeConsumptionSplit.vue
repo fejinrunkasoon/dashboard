@@ -4,6 +4,7 @@ import { formatCurrency } from '~/utils'
 
 const props = defineProps<{
   ownershipSpend: DashboardOwnershipSpend
+  rangeDays: number
 }>()
 
 const internalPercent = computed(() => {
@@ -23,7 +24,7 @@ const externalPercent = computed(() => {
   <UCard>
     <template #header>
       <p class="text-xs text-muted uppercase">
-        消耗结构 (自家 / 外接 · 30D Media Spend)
+        消耗结构（自家 / 外接 · {{ rangeDays }} 日媒体消耗）
       </p>
     </template>
 

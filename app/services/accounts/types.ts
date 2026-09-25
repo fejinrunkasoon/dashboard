@@ -19,9 +19,16 @@ import type { PagedResponse } from '../../domain/common'
 export interface AssignDirectInput {
   accountIds: string[]
   teamId: string
-  memberId?: string | null
+  /** Required — aligned with demand scheduling allocate. */
+  memberId: string
+  /** Required — writes accountManagerAssignments. */
+  managerId: string
+  /** Required — writes accountProductAssignments. */
+  productId: string
   reason?: string | null
   createdBy: string
+  /** AppUser id — must pass canAllocateAccounts (not TEAM_MEMBER). */
+  actorUserId: string
 }
 
 export interface AssignDirectResult {
@@ -79,6 +86,8 @@ export interface ChangeManagerInput {
   managerMemberId: string
   reason?: string | null
   createdBy: string
+  /** AppUser id — must pass canChangeAccountManager (not TEAM_MEMBER). */
+  actorUserId: string
 }
 
 export interface ChangeManagerResult {

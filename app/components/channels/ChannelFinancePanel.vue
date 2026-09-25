@@ -13,6 +13,18 @@ import type {
   ServiceFeeTier
 } from '~/domain'
 import { formatCurrency } from '~/utils'
+import { ENTITY_STATUS_LABEL, PREPAYMENT_STATUS_LABEL, REFUND_STATUS_LABEL, labelOf } from '~/utils/labels'
+
+const ADDRESS_STATUS_LABEL: Record<string, string> = {
+  ACTIVE: '启用',
+  PENDING_APPROVAL: '待审批',
+  DISABLED: '停用',
+  ARCHIVED: '归档'
+}
+
+function financeStatusLabel(status: string) {
+  return labelOf({ ...ENTITY_STATUS_LABEL, ...PREPAYMENT_STATUS_LABEL, ...REFUND_STATUS_LABEL, ...ADDRESS_STATUS_LABEL }, status)
+}
 
 const props = defineProps<{
   settlementYear: number
@@ -26,6 +38,7 @@ const props = defineProps<{
   tiersByPolicyId: Record<string, ServiceFeeTier[]>
   policyCodeById: Record<string, string>
   canPay: boolean
+  canReviewAddress: boolean
   fundSummaries: ChannelOwnershipFundSummary[]
   balanceThreshold: ChannelBalanceThreshold | null
 }>()
@@ -112,44 +125,44 @@ function tierLabel(tierId: string | null | undefined): string {
 }
 
 const addressColumns: TableColumn<ChannelPaymentAddress>[] = [
-  { accessorKey: 'type', header: 'Type' },
-  { id: 'label', header: 'Label' },
-  { id: 'payload', header: 'Address' },
-  { accessorKey: 'status', header: 'Status' },
+  { accessorKey: 'type', header: '类型' },
+  { id: 'label', header: '标签' },
+  { id: 'payload', header: '地址' },
+  { accessorKey: 'status', header: '状态' },
   { id: 'actions', header: '' }
 ]
 
 const payColumns: TableColumn<ChannelPrepayment>[] = [
-  { accessorKey: 'paymentNo', header: 'No' },
-  { id: 'address', header: 'Address' },
+  { accessorKey: 'paymentNo', header: '编号' },
+  { id: 'address', header: '地址' },
   { id: 'ownership', header: '归属' },
-  { id: 'amount', header: 'Amount' },
-  { accessorKey: 'status', header: 'Status' },
+  { id: 'amount', header: '金额' },
+  { accessorKey: 'status', header: '状态' },
   { accessorKey: 'createdAt', header: '录入' }
 ]
 
 const refundColumns: TableColumn<ChannelRefund>[] = [
-  { accessorKey: 'refundNo', header: 'No' },
-  { id: 'amount', header: 'Amount' },
-  { accessorKey: 'status', header: 'Status' },
-  { accessorKey: 'requestedAt', header: 'Requested' },
+  { accessorKey: 'refundNo', header: '编号' },
+  { id: 'amount', header: '金额' },
+  { accessorKey: 'status', header: '状态' },
+  { accessorKey: 'requestedAt', header: '申请时间' },
   { id: 'actions', header: '' }
 ]
 
 const settlementColumns: TableColumn<AccountMonthlySettlement>[] = [
-  { accessorKey: 'accountId', header: 'Account' },
-  { id: 'policy', header: 'Policy' },
-  { id: 'mediaSpend', header: 'Media Spend' },
-  { id: 'tier', header: 'Tier' },
-  { id: 'rate', header: 'Rate' },
-  { id: 'fee', header: 'Service Fee' }
+  { accessorKey: 'accountId', header: '账户' },
+  { id: 'policy', header: '政策' },
+  { id: 'mediaSpend', header: '媒体消耗' },
+  { id: 'tier', header: '档位' },
+  { id: 'rate', header: '费率' },
+  { id: 'fee', header: '服务费' }
 ]
 
 const policyColumns: TableColumn<ServiceFeePolicy>[] = [
-  { accessorKey: 'code', header: 'Code' },
-  { accessorKey: 'name', header: 'Name' },
-  { accessorKey: 'status', header: 'Status' },
-  { id: 'tiers', header: 'Tiers' },
+  { accessorKey: 'code', header: '编码' },
+  { accessorKey: 'name', header: '名称' },
+  { accessorKey: 'status', header: '状态' },
+  { id: 'tiers', header: '阶梯' },
   { id: 'actions', header: '' }
 ]
 </script>
@@ -233,8 +246,8 @@ const policyColumns: TableColumn<ServiceFeePolicy>[] = [
           <USelect
             v-model="draftSeverity"
             :items="[
-              { label: 'WARNING', value: 'WARNING' },
-              { label: 'URGENT', value: 'URGENT' }
+              { label: '警告', value: 'WARNING' },
+              { label: '紧急', value: 'URGENT' }
             ]"
             value-key="value"
             label-key="label"
@@ -255,7 +268,7 @@ const policyColumns: TableColumn<ServiceFeePolicy>[] = [
         月度结算（{{ settlementYear }}-{{ String(settlementMonth).padStart(2, '0') }}）
       </h3>
       <p class="text-xs text-muted">
-        settlementCost = Media Spend + Service Fee。与账户「已花费」无关。
+        结算成本 = 媒体消耗 + 服务费。与账户「已花费」无关。
       </p>
       <div
         v-if="settlementSummary"
@@ -266,7 +279,7 @@ const policyColumns: TableColumn<ServiceFeePolicy>[] = [
           <p class="font-medium">{{ settlementSummary.accountCount }}</p>
         </div>
         <div class="rounded-lg bg-elevated/50 p-3">
-          <p class="text-xs text-muted">Media Spend</p>
+          <p class="text-xs text-muted">媒体消耗</p>
           <p class="font-medium">{{ formatCurrency(settlementSummary.mediaSpend) }}</p>
         </div>
         <div class="rounded-lg bg-elevated/50 p-3">
@@ -310,7 +323,7 @@ const policyColumns: TableColumn<ServiceFeePolicy>[] = [
       <div class="flex items-center justify-between gap-2">
         <div>
           <h3 class="text-sm font-medium text-highlighted">服务费政策</h3>
-          <p class="text-xs text-muted">NON_PROGRESSIVE_TIER；停用后不可再绑新账户</p>
+          <p class="text-xs text-muted">非累进阶梯；停用后不可再绑新账户</p>
         </div>
         <UButton
           label="新建政策"
@@ -322,7 +335,7 @@ const policyColumns: TableColumn<ServiceFeePolicy>[] = [
       </div>
       <UTable v-if="policies.length" :data="policies" :columns="policyColumns">
         <template #status-cell="{ row }">
-          <UBadge :label="row.original.status" variant="subtle" size="xs" />
+          <UBadge :label="financeStatusLabel(row.original.status)" variant="subtle" size="xs" />
         </template>
         <template #tiers-cell="{ row }">
           <div class="space-y-0.5 text-xs font-mono">
@@ -365,7 +378,7 @@ const policyColumns: TableColumn<ServiceFeePolicy>[] = [
       <div class="flex items-center justify-between gap-2">
         <div>
           <h3 class="text-sm font-medium text-highlighted">打款地址</h3>
-          <p class="text-xs text-muted">提交后待团队负责人审核；仅 ACTIVE 可用于登记打款</p>
+          <p class="text-xs text-muted">提交后待团队负责人审核；仅启用状态可用于登记打款</p>
         </div>
         <UButton
           label="新增地址"
@@ -383,7 +396,7 @@ const policyColumns: TableColumn<ServiceFeePolicy>[] = [
           <span class="font-mono text-xs">{{ maskAddress(row.original.addressPayload) }}</span>
         </template>
         <template #status-cell="{ row }">
-          <UBadge :label="row.original.status" variant="subtle" size="xs" />
+          <UBadge :label="financeStatusLabel(row.original.status)" variant="subtle" size="xs" />
         </template>
         <template #actions-cell="{ row }">
           <div class="flex justify-end gap-1 flex-wrap">
@@ -396,7 +409,7 @@ const policyColumns: TableColumn<ServiceFeePolicy>[] = [
               @click="emit('edit-address', row.original)"
             />
             <UButton
-              v-if="row.original.status === 'PENDING_APPROVAL'"
+              v-if="row.original.status === 'PENDING_APPROVAL' && canReviewAddress"
               label="通过"
               size="xs"
               color="success"
@@ -404,7 +417,7 @@ const policyColumns: TableColumn<ServiceFeePolicy>[] = [
               @click="emit('approve-address', row.original)"
             />
             <UButton
-              v-if="row.original.status === 'PENDING_APPROVAL'"
+              v-if="row.original.status === 'PENDING_APPROVAL' && canReviewAddress"
               label="驳回"
               size="xs"
               color="error"

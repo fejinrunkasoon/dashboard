@@ -185,10 +185,10 @@ async function onTogglePlatform(mediaId: string, enabled: boolean) {
           v-if="editingMediaId === media.id"
           class="border-t border-default pt-3 space-y-3"
         >
-          <UFormField label="App ID" required>
-            <UInput v-model="formAppId" placeholder="Provider App / Client ID" class="w-full" />
+          <UFormField label="应用 ID" required>
+            <UInput v-model="formAppId" placeholder="服务商应用 / Client ID" class="w-full" />
           </UFormField>
-          <UFormField :label="appForMedia(media.id)?.hasSecret ? 'App Secret（留空则不改）' : 'App Secret'">
+          <UFormField :label="appForMedia(media.id)?.hasSecret ? '应用密钥（留空则不改）' : '应用密钥'">
             <UInput
               v-model="formSecret"
               type="password"
@@ -199,12 +199,12 @@ async function onTogglePlatform(mediaId: string, enabled: boolean) {
           </UFormField>
           <UFormField
             v-if="media.code === 'GOOGLE'"
-            :label="appForMedia(media.id)?.hasDeveloperToken ? 'Developer Token（留空则不改）' : 'Developer Token'"
+            :label="appForMedia(media.id)?.hasDeveloperToken ? '开发者令牌（留空则不改）' : '开发者令牌'"
           >
             <UInput
               v-model="formDeveloperToken"
               type="password"
-              placeholder="Google Ads developer token"
+              placeholder="Google Ads 开发者令牌"
               class="w-full"
             />
           </UFormField>

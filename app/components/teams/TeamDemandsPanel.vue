@@ -35,12 +35,12 @@ const demandStatusLabel: Record<string, string> = {
 }
 
 const demandColumns: TableColumn<TeamDemandListItem>[] = [
-  { accessorKey: 'demandNo', header: 'Demand No' },
-  { id: 'status', header: 'Status' },
-  { accessorKey: 'priority', header: 'Priority' },
-  { id: 'expectedDate', header: 'Expected' },
-  { accessorKey: 'unfulfilledQuantity', header: 'Unfulfilled' },
-  { id: 'reason', header: 'Reason' },
+  { accessorKey: 'demandNo', header: '需求号' },
+  { id: 'status', header: '状态' },
+  { accessorKey: 'priority', header: '优先级' },
+  { id: 'expectedDate', header: '期望日期' },
+  { accessorKey: 'unfulfilledQuantity', header: '未满足' },
+  { id: 'reason', header: '原因' },
   { id: 'actions', header: '' }
 ]
 
@@ -48,7 +48,12 @@ function demandCell(row: Row<TeamDemandListItem>) {
   return row.original
 }
 
-const canApprove = computed(() => Boolean(props.leaderMemberId))
+const { member } = useCurrentUser()
+
+/** Only the assigned team leader may approve — not merely "team has a leader". */
+const canApprove = computed(
+  () => Boolean(props.leaderMemberId && member.value?.id === props.leaderMemberId)
+)
 </script>
 
 <template>
@@ -163,7 +168,7 @@ const canApprove = computed(() => Boolean(props.leaderMemberId))
         class="mt-4 rounded-lg border border-default bg-elevated/40 p-3 space-y-2"
       >
         <p class="text-xs font-medium text-muted">
-          Demand Item · {{ expandedDemandId }}
+          需求明细 · {{ expandedDemandId }}
         </p>
         <div
           v-for="item in expandedItems"
@@ -171,19 +176,19 @@ const canApprove = computed(() => Boolean(props.leaderMemberId))
           class="text-sm grid sm:grid-cols-2 gap-2"
         >
           <p>
-            <span class="text-muted">Media：</span>
+            <span class="text-muted">媒体：</span>
             {{ mediaNameById[item.mediaId] ?? item.mediaId }}
           </p>
           <p>
-            <span class="text-muted">Product：</span>
+            <span class="text-muted">产品：</span>
             {{ item.productId ? (productNameById[item.productId] ?? item.productId) : '—' }}
           </p>
           <p>
-            <span class="text-muted">Quantity：</span>
+            <span class="text-muted">数量：</span>
             {{ item.requestedQuantity }}（已批 {{ item.approvedQuantity }}）
           </p>
           <p>
-            <span class="text-muted">Requirements：</span>
+            <span class="text-muted">需求条件：</span>
             <span class="font-mono text-xs">{{ JSON.stringify(item.requirements) }}</span>
           </p>
         </div>

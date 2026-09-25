@@ -117,8 +117,10 @@ export type {
   LogsService,
   OperationLog,
   OperationLogResult,
+  OperationLogQuery,
   ConnectorSyncLog,
-  SyncLogStatus
+  SyncLogStatus,
+  SyncLogListQuery
 } from './logs/types'
 export { logsService } from './logs/mock'
 
@@ -221,7 +223,19 @@ export type {
 export { mediaSyncService } from './media-sync/mock'
 
 export type { AccountAccessService } from './access/types'
-export { accountAccessService, getAccessibleAccountIdsSync } from './access/mock'
+export {
+  accountAccessService,
+  getAccessibleAccountIdsSync,
+  canAllocateAccountsSync,
+  assertCanAllocateAccounts,
+  userCanAllocateAccounts,
+  canChangeAccountManagerSync,
+  assertCanChangeAccountManager,
+  userCanChangeAccountManager,
+  userCanReviewPaymentAddress,
+  canReviewPaymentAddressByMemberId,
+  assertCanReviewPaymentAddressByMemberId
+} from './access/mock'
 export type {
   OrgAdminService,
   AppUserListItem,

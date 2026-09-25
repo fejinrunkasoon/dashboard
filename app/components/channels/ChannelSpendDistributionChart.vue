@@ -47,7 +47,7 @@ const chartData = computed(() => {
 
 const chartOptions = computed<ChartOptions<'doughnut'>>(() => ({
   responsive: true,
-  maintainAspectRatio: true,
+  maintainAspectRatio: false,
   plugins: {
     legend: {
       position: 'right',
@@ -88,7 +88,7 @@ const chartOptions = computed<ChartOptions<'doughnut'>>(() => ({
     </div>
 
     <ClientOnly v-else>
-      <div class="h-80 flex items-center justify-center">
+      <div class="relative h-80 w-full overflow-hidden">
         <Doughnut v-if="chartData" :data="chartData" :options="chartOptions" />
       </div>
     </ClientOnly>

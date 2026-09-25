@@ -18,7 +18,7 @@ const emit = defineEmits<{
 }>()
 
 const columns: TableColumn<MediaFieldDefinition>[] = [
-  { accessorKey: 'key', header: 'Key' },
+  { accessorKey: 'key', header: '键名' },
   { accessorKey: 'label', header: '标签' },
   { accessorKey: 'fieldType', header: '类型' },
   { accessorKey: 'required', header: '必填' },

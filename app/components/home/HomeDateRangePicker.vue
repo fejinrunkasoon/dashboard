@@ -1,12 +1,18 @@
 <script setup lang="ts">
-import { DateFormatter, getLocalTimeZone, CalendarDate, today } from '@internationalized/date'
+import { DateFormatter, getLocalTimeZone, CalendarDate } from '@internationalized/date'
 import type { Range } from '~/types'
+import { MOCK_TODAY, parseDate } from '~/utils/spend-aggregation'
 
 const df = new DateFormatter('zh-CN', {
   dateStyle: 'medium'
 })
 
 const selected = defineModel<Range>({ required: true })
+
+/** Anchor presets to mock data today so the picker matches spend windows. */
+const props = withDefaults(defineProps<{
+  anchorDate?: Date
+}>(), {})
 
 const ranges = [
   { label: '近7天', days: 7 },
@@ -25,6 +31,11 @@ const toCalendarDate = (date: Date) => {
   )
 }
 
+const anchorToday = computed(() => {
+  const date = props.anchorDate ?? parseDate(MOCK_TODAY)
+  return toCalendarDate(date)
+})
+
 const calendarRange = computed({
   get: () => ({
     start: selected.value.start ? toCalendarDate(selected.value.start) : undefined,
@@ -41,11 +52,12 @@ const calendarRange = computed({
 const isRangeSelected = (range: { days?: number, months?: number, years?: number }) => {
   if (!selected.value.start || !selected.value.end) return false
 
-  const currentDate = today(getLocalTimeZone())
+  const currentDate = anchorToday.value
   let startDate = currentDate.copy()
 
   if (range.days) {
-    startDate = startDate.subtract({ days: range.days })
+    // Inclusive day count: "近7天" = today + 6 prior days.
+    startDate = startDate.subtract({ days: range.days - 1 })
   } else if (range.months) {
     startDate = startDate.subtract({ months: range.months })
   } else if (range.years) {
@@ -59,11 +71,11 @@ const isRangeSelected = (range: { days?: number, months?: number, years?: number
 }
 
 const selectRange = (range: { days?: number, months?: number, years?: number }) => {
-  const endDate = today(getLocalTimeZone())
+  const endDate = anchorToday.value
   let startDate = endDate.copy()
 
   if (range.days) {
-    startDate = startDate.subtract({ days: range.days })
+    startDate = startDate.subtract({ days: range.days - 1 })
   } else if (range.months) {
     startDate = startDate.subtract({ months: range.months })
   } else if (range.years) {

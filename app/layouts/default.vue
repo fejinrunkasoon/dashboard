@@ -1,20 +1,14 @@
 <script setup lang="ts">
 import type { NavigationMenuItem } from '@nuxt/ui'
-import { alertService } from '~/services'
 
 const route = useRoute()
+const { openAlertCount, refreshOpenAlertCount } = useDashboard()
 
 const open = ref(false)
 
 const close = () => { open.value = false }
 
-const openAlertCount = ref(0)
-
-try {
-  openAlertCount.value = await alertService.getOpenCount()
-} catch {
-  openAlertCount.value = 0
-}
+await refreshOpenAlertCount()
 
 const links = computed(() => [[{
   label: '运营总览',
@@ -96,12 +90,7 @@ const links = computed(() => [[{
       onSelect: close
     }]
   }]
-}], [{
-  label: '使用帮助',
-  icon: 'i-lucide-info',
-  to: 'https://github.com/nuxt-ui-templates/dashboard',
-  target: '_blank'
-}]] satisfies NavigationMenuItem[][])
+}],] satisfies NavigationMenuItem[][])
 
 const groups = computed(() => [{
   id: 'links',

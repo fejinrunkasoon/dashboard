@@ -39,7 +39,7 @@ const items = [[{
   icon: 'i-lucide-user-cog',
   to: '/settings/organization'
 }, {
-  label: '渠道',
+  label: '渠道开通与维护',
   icon: 'i-lucide-git-branch',
   to: '/settings/channels'
 }, {
@@ -115,7 +115,7 @@ watch(trendDays, () => { void loadOverview() }, { immediate: true })
 
       <UDashboardToolbar>
         <template #left>
-          <HomeDateRangePicker v-model="range" class="-ms-1" />
+          <HomeDateRangePicker v-model="range" :anchor-date="mockToday" class="-ms-1" />
           <HomePeriodSelect v-model="period" :range="range" />
         </template>
       </UDashboardToolbar>
@@ -134,15 +134,18 @@ watch(trendDays, () => { void loadOverview() }, { immediate: true })
         </div>
 
         <template v-else-if="bundle">
-          <HomeStats :kpis="bundle.kpis" />
+          <HomeStats :kpis="bundle.kpis" :range-days="bundle.rangeDays" />
           <HomeChart :spend-trend="bundle.spendTrend" :period="period" />
           <div class="grid lg:grid-cols-2 gap-4">
-            <HomeConsumptionSplit :ownership-spend="bundle.ownershipSpend" />
+            <HomeConsumptionSplit
+              :ownership-spend="bundle.ownershipSpend"
+              :range-days="bundle.rangeDays"
+            />
             <HomeAccountStructure :account-structure="bundle.accountStructure" />
           </div>
           <div class="grid lg:grid-cols-3 gap-4">
-            <HomeChannelOverview :channels="bundle.channels" />
-            <HomeTeamOverview :teams="bundle.teams" />
+            <HomeChannelOverview :channels="bundle.channels" :range-days="bundle.rangeDays" />
+            <HomeTeamOverview :teams="bundle.teams" :range-days="bundle.rangeDays" />
             <HomeImportantAlerts :alerts="bundle.alerts" />
           </div>
         </template>

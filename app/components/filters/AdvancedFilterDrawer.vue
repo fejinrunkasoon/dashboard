@@ -24,12 +24,12 @@ const emit = defineEmits<{
 }>()
 
 const assetStatusOptions = [
-  { label: 'AVAILABLE', value: 'AVAILABLE' },
-  { label: 'ASSIGNED', value: 'ASSIGNED' },
-  { label: 'IN_USE', value: 'IN_USE' },
-  { label: 'IDLE', value: 'IDLE' },
-  { label: 'DISABLED', value: 'DISABLED' },
-  { label: 'ARCHIVED', value: 'ARCHIVED' }
+  { label: '可用', value: 'AVAILABLE' },
+  { label: '已分配', value: 'ASSIGNED' },
+  { label: '使用中', value: 'IN_USE' },
+  { label: '闲置', value: 'IDLE' },
+  { label: '停用', value: 'DISABLED' },
+  { label: '归档', value: 'ARCHIVED' }
 ]
 
 const ownershipOptions = [
@@ -135,16 +135,16 @@ function reset() {
         </UFormField>
 
         <div class="grid grid-cols-2 gap-3">
-          <UFormField label="Spend Limit Min">
+          <UFormField label="消耗上限（最低）">
             <UInput v-model.number="spendLimitMin" type="number" placeholder="—" />
           </UFormField>
-          <UFormField label="Spend Limit Max">
+          <UFormField label="消耗上限（最高）">
             <UInput v-model.number="spendLimitMax" type="number" placeholder="—" />
           </UFormField>
-          <UFormField label="已花费 Min">
+          <UFormField label="已花费（最低）">
             <UInput v-model.number="amountSpentMin" type="number" placeholder="—" />
           </UFormField>
-          <UFormField label="已花费 Max">
+          <UFormField label="已花费（最高）">
             <UInput v-model.number="amountSpentMax" type="number" placeholder="—" />
           </UFormField>
         </div>

@@ -4,6 +4,7 @@ import { formatCurrency } from '~/utils'
 
 defineProps<{
   teams: DashboardTeamRow[]
+  rangeDays: number
 }>()
 
 function formatRate(value: number): string {
@@ -18,7 +19,7 @@ function formatRate(value: number): string {
     <template #header>
       <div class="flex items-center justify-between gap-2">
         <p class="text-xs text-muted uppercase">
-          团队概览
+          团队概览 · {{ rangeDays }} 日消耗
         </p>
         <div class="flex items-center gap-2">
           <UButton
@@ -61,7 +62,7 @@ function formatRate(value: number): string {
           </p>
         </div>
         <p class="text-sm tabular-nums text-highlighted shrink-0">
-          {{ formatCurrency(row.spend7d) }}
+          {{ formatCurrency(row.spend) }}
         </p>
       </NuxtLink>
     </div>

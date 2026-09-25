@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { MediaCredential, MediaCredentialStatus, PlatformAssetType, SyncScopeConfig } from '~/domain'
+import { CREDENTIAL_STATUS_LABEL, labelOf } from '~/utils/labels'
 import type { ConnectorBindingListItem } from '~/services'
 
 const props = defineProps<{
@@ -30,10 +31,10 @@ const syncStatus = ref(false)
 const scopeTypeIds = ref<string[]>([])
 
 const statusOptions: { label: string, value: MediaCredentialStatus }[] = [
-  { label: 'DRAFT', value: 'DRAFT' },
-  { label: 'MOCK_CONNECTED', value: 'MOCK_CONNECTED' },
-  { label: 'EXPIRED', value: 'EXPIRED' },
-  { label: 'REVOKED', value: 'REVOKED' }
+  { label: '草稿', value: 'DRAFT' },
+  { label: 'Mock 已连接', value: 'MOCK_CONNECTED' },
+  { label: '已过期', value: 'EXPIRED' },
+  { label: '已吊销', value: 'REVOKED' }
 ]
 
 const selectedCredential = computed(() =>
@@ -105,7 +106,7 @@ function onCredentialStatusChange(value: MediaCredentialStatus | MediaCredential
       variant="subtle"
       icon="i-lucide-info"
       title="Mock Credential"
-      description="状态可手动切换（DRAFT / MOCK_CONNECTED / EXPIRED / REVOKED）。停用绑定后不可标为 MOCK_CONNECTED。"
+      description="状态可手动切换（草稿 / Mock 已连接 / 已过期 / 已吊销）。停用绑定后不可标为 Mock 已连接。"
     />
 
     <div v-if="!binding" class="rounded-lg border border-dashed border-default p-6 text-sm text-muted">
@@ -114,7 +115,7 @@ function onCredentialStatusChange(value: MediaCredentialStatus | MediaCredential
 
     <template v-else>
       <div class="flex flex-wrap items-end gap-2">
-        <UFormField label="新建 Credential 标签" class="min-w-48 flex-1">
+        <UFormField label="新建凭据标签" class="min-w-48 flex-1">
           <UInput v-model="newLabel" placeholder="例如：Ops Desk (Mock)" />
         </UFormField>
         <UButton
@@ -147,7 +148,7 @@ function onCredentialStatusChange(value: MediaCredentialStatus | MediaCredential
             <span class="ml-2 font-mono text-xs text-muted">{{ cred.id }}</span>
           </div>
           <UBadge
-            :label="cred.status"
+            :label="labelOf(CREDENTIAL_STATUS_LABEL, cred.status)"
             :color="statusColor(cred.status)"
             variant="subtle"
             size="xs"
@@ -178,7 +179,7 @@ function onCredentialStatusChange(value: MediaCredentialStatus | MediaCredential
           <p class="text-xs text-muted">
             开启后可在
             <NuxtLink to="/accounts/connections" class="text-primary underline">平台连接</NuxtLink>
-            运行 Discovery。
+            运行发现。
           </p>
           <UCheckbox v-model="syncSpend" label="同步消耗" />
           <UCheckbox v-model="syncStatus" label="同步状态" />

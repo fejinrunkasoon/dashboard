@@ -8,17 +8,21 @@ import type {
   AdAccountListItem
 } from '~/domain'
 import { DEMAND_TIMEZONE_OPTIONS } from '~/domain'
+import { MEDIA_STATUS_LABEL, API_ACCESS_STATUS_LABEL, labelOf } from '~/utils/labels'
 import {
   accountService,
   channelService,
   demandService,
   mediaService,
+  productService,
   teamService
 } from '~/services'
 
 useSeoMeta({ title: '账户池' })
 
 const toast = useToast()
+
+const { userId, member, canAllocateAccounts } = useCurrentUser()
 
 const { query, activeChips, setFilters, clearFilters, removeFilter } = useAccountFilters({
   page: 1,
@@ -29,6 +33,7 @@ const mediaPlatforms = await mediaService.getMediaPlatforms({ status: 'ACTIVE' }
 const channels = await channelService.getChannels()
 const teams = await teamService.getTeams()
 const members = await teamService.getMembers()
+const products = await productService.getProducts()
 
 const mediaFilterOptions = [
   { label: '全部媒体', value: 'all' },
@@ -68,18 +73,18 @@ const quickChannel = computed({
 
 const apiOptions = [
   { label: '全部 API', value: 'all' },
-  { label: 'ACCESSIBLE', value: 'ACCESSIBLE' },
-  { label: 'LOST', value: 'LOST' },
-  { label: 'UNKNOWN', value: 'UNKNOWN' }
+  { label: '可访问', value: 'ACCESSIBLE' },
+  { label: '已失效', value: 'LOST' },
+  { label: '未知', value: 'UNKNOWN' }
 ]
 
 const mediaStatusOptions = [
   { label: '全部媒体状态', value: 'all' },
-  { label: 'ACTIVE', value: 'ACTIVE' },
-  { label: 'RESTRICTED', value: 'RESTRICTED' },
-  { label: 'DISABLED', value: 'DISABLED' },
-  { label: 'BANNED', value: 'BANNED' },
-  { label: 'UNKNOWN', value: 'UNKNOWN' }
+  { label: '正常', value: 'ACTIVE' },
+  { label: '受限', value: 'RESTRICTED' },
+  { label: '停用', value: 'DISABLED' },
+  { label: '封禁', value: 'BANNED' },
+  { label: '未知', value: 'UNKNOWN' }
 ]
 
 const quickApi = computed({
@@ -162,6 +167,8 @@ const showDirectAssign = ref(false)
 const showDemandAssign = ref(false)
 const transferTargetTeamId = ref<string | undefined>()
 const transferTargetMemberId = ref<string | undefined>()
+const assignManagerId = ref<string | undefined>()
+const assignProductId = ref<string | undefined>()
 const assignReason = ref('')
 
 const openDemands = ref<AccountDemand[]>([])
@@ -174,6 +181,31 @@ const targetTeamMembers = computed(() => {
   return members.filter(item => item.teamId === transferTargetTeamId.value)
 })
 
+const managerOptions = computed(() =>
+  members.map(item => ({ label: item.name, value: item.id }))
+)
+
+const productOptions = computed(() =>
+  products.map(item => ({
+    label: item.ownershipType === 'EXTERNAL' ? `${item.name} · 外接` : `${item.name} · 自家`,
+    value: item.id
+  }))
+)
+
+const canConfirmDirectAssign = computed(() =>
+  Boolean(
+    transferTargetTeamId.value
+    && transferTargetMemberId.value
+    && assignManagerId.value
+    && assignProductId.value
+    && assignReason.value.trim()
+  )
+)
+
+watch(transferTargetTeamId, () => {
+  transferTargetMemberId.value = undefined
+})
+
 const selectedDemandItems = computed(() => {
   if (!selectedDemandId.value) return []
   return demandItems.value.filter(item => item.demandId === selectedDemandId.value)
@@ -184,14 +216,34 @@ function openDetail(account: AdAccountListItem) {
 }
 
 async function openDirectAssign(account: AdAccountListItem) {
+  if (!canAllocateAccounts.value) {
+    toast.add({
+      title: '无分配权限',
+      description: '仅 PLATFORM_ADMIN / ORG_ADMIN / TEAM_MANAGER 可分配账户',
+      color: 'warning',
+      icon: 'i-lucide-shield-alert'
+    })
+    return
+  }
   selectedAccount.value = account
   transferTargetTeamId.value = undefined
   transferTargetMemberId.value = undefined
+  assignManagerId.value = undefined
+  assignProductId.value = undefined
   assignReason.value = ''
   showDirectAssign.value = true
 }
 
 async function openDemandAssign(account: AdAccountListItem) {
+  if (!canAllocateAccounts.value) {
+    toast.add({
+      title: '无分配权限',
+      description: '仅 PLATFORM_ADMIN / ORG_ADMIN / TEAM_MANAGER 可分配账户',
+      color: 'warning',
+      icon: 'i-lucide-shield-alert'
+    })
+    return
+  }
   selectedAccount.value = account
   selectedDemandId.value = undefined
   selectedDemandItemId.value = undefined
@@ -218,22 +270,41 @@ async function openDemandAssign(account: AdAccountListItem) {
 }
 
 async function confirmDirectAssign() {
-  if (!selectedAccount.value || !transferTargetTeamId.value || !assignReason.value.trim()) return
+  if (
+    !selectedAccount.value
+    || !transferTargetTeamId.value
+    || !transferTargetMemberId.value
+    || !assignManagerId.value
+    || !assignProductId.value
+    || !assignReason.value.trim()
+  ) return
+  if (!canAllocateAccounts.value || !member.value) {
+    toast.add({
+      title: '无分配权限',
+      description: '仅 PLATFORM_ADMIN / ORG_ADMIN / TEAM_MANAGER 可分配账户',
+      color: 'error',
+      icon: 'i-lucide-shield-alert'
+    })
+    return
+  }
   const account = selectedAccount.value
   const team = teams.find(item => item.id === transferTargetTeamId.value)
-  const member = members.find(item => item.id === transferTargetMemberId.value)
+  const targetMember = members.find(item => item.id === transferTargetMemberId.value)
   try {
     await accountService.assignDirect({
       accountIds: [account.id],
       teamId: transferTargetTeamId.value,
       memberId: transferTargetMemberId.value,
+      managerId: assignManagerId.value,
+      productId: assignProductId.value,
       reason: assignReason.value.trim(),
-      createdBy: 'mem-lisi'
+      createdBy: member.value.id,
+      actorUserId: userId.value
     })
     showDirectAssign.value = false
     toast.add({
-      title: 'DIRECT 分配成功',
-      description: `${account.externalAccountId} → ${team?.name ?? ''}${member ? ` / ${member.name}` : ''}`,
+      title: '直接分配成功',
+      description: `${account.externalAccountId} → ${team?.name ?? ''}${targetMember ? ` / ${targetMember.name}` : ''}`,
       icon: 'i-lucide-check',
       color: 'success'
     })
@@ -250,26 +321,52 @@ async function confirmDirectAssign() {
 
 async function confirmDemandAssign() {
   if (!selectedAccount.value || !selectedDemandItemId.value || !assignReason.value.trim()) return
+  if (!canAllocateAccounts.value || !member.value) {
+    toast.add({
+      title: '无分配权限',
+      description: '仅 PLATFORM_ADMIN / ORG_ADMIN / TEAM_MANAGER 可分配账户',
+      color: 'error',
+      icon: 'i-lucide-shield-alert'
+    })
+    return
+  }
   const account = selectedAccount.value
   const demand = openDemands.value.find(item => item.id === selectedDemandId.value)
+  if (!demand) return
+  const teamMembers = members.filter(item => item.teamId === demand.teamId)
+  const team = teams.find(item => item.id === demand.teamId)
+  const defaultMemberId = team?.leaderMemberId ?? teamMembers[0]?.id
+  const defaultManagerId = team?.leaderMemberId ?? teamMembers[0]?.id
+  if (!defaultMemberId || !defaultManagerId) {
+    toast.add({
+      title: '需求分配失败',
+      description: '目标团队没有可用成员/负责人',
+      color: 'error',
+      icon: 'i-lucide-alert-circle'
+    })
+    return
+  }
   try {
     const result = await demandService.allocate({
       demandItemId: selectedDemandItemId.value,
       accountIds: [account.id],
-      allocatedBy: 'mem-lisi',
-      reason: assignReason.value.trim()
+      allocatedBy: member.value.id,
+      memberId: defaultMemberId,
+      managerId: defaultManagerId,
+      reason: assignReason.value.trim(),
+      actorUserId: userId.value
     })
     showDemandAssign.value = false
     toast.add({
-      title: 'DEMAND 分配成功',
-      description: `${account.externalAccountId} → ${demand?.demandNo ?? result.demand.demandNo}（${result.demand.status}）`,
+      title: '需求分配成功',
+      description: `${account.externalAccountId} → ${demand.demandNo ?? result.demand.demandNo}（${result.demand.status}）`,
       icon: 'i-lucide-check',
       color: 'success'
     })
     await loadPool()
   } catch (error) {
     toast.add({
-      title: 'Demand 分配失败',
+      title: '需求分配失败',
       description: error instanceof Error ? error.message : '未知错误',
       color: 'error',
       icon: 'i-lucide-alert-circle'
@@ -297,7 +394,7 @@ const columns: TableColumn<AdAccountListItem>[] = [{
   header: '媒体状态'
 }, {
   accessorKey: 'apiAccessStatus',
-  header: 'API'
+  header: 'API 状态'
 }, {
   id: 'receivedAt',
   header: '入库'
@@ -317,7 +414,7 @@ const exportColumns = [
   { key: 'channel', header: '渠道' },
   { key: 'timezone', header: '时区' },
   { key: 'mediaStatus', header: '媒体状态' },
-  { key: 'apiAccessStatus', header: 'API' },
+  { key: 'apiAccessStatus', header: 'API 状态' },
   { key: 'receivedAt', header: '入库' }
 ]
 
@@ -401,7 +498,7 @@ async function getExportRows() {
       />
 
       <p class="text-xs text-muted">
-        账户池是动态视图：AVAILABLE、无当前分配、媒体状态 ACTIVE。非手工 is_pool 列表。
+        账户池是动态视图：状态为可用、无当前分配、媒体状态正常。非手工维护的池列表。
       </p>
 
       <div v-if="errorMessage" class="rounded-lg border border-error/30 bg-error/5 p-4 text-sm text-error">
@@ -421,7 +518,7 @@ async function getExportRows() {
         <UIcon name="i-lucide-inbox" class="size-8" />
         <p>当前无可用库存</p>
         <p class="text-xs">
-          库存不足时可在后续阶段创建渠道下户单（Channel Account Order）。
+          库存不足时可在后续阶段创建渠道下户单。
         </p>
         <UButton
           v-if="activeChips.length"
@@ -436,14 +533,13 @@ async function getExportRows() {
         <UTable :data="rows" :columns="columns">
           <template #externalAccountId-cell="{ row }">
             <div class="min-w-36">
-              <UButton
-                :label="cellAccount(row).externalAccountId"
-                variant="ghost"
-                color="neutral"
-                class="font-mono text-sm -px-2 -py-1"
-                @click="openDetail(cellAccount(row))"
-              />
-              <p class="text-xs text-muted truncate ps-2">
+              <NuxtLink
+                :to="`/accounts/${cellAccount(row).id}`"
+                class="font-mono text-sm text-highlighted hover:text-primary hover:underline transition-colors"
+              >
+                {{ cellAccount(row).externalAccountId }}
+              </NuxtLink>
+              <p class="text-xs text-muted truncate">
                 {{ cellAccount(row).accountName ?? '—' }}
               </p>
             </div>
@@ -454,7 +550,12 @@ async function getExportRows() {
           </template>
 
           <template #channel-cell="{ row }">
-            {{ cellAccount(row).channel.name }}
+            <NuxtLink
+              :to="`/channels/${cellAccount(row).channel.id}`"
+              class="text-highlighted hover:text-primary hover:underline transition-colors"
+            >
+              {{ cellAccount(row).channel.name }}
+            </NuxtLink>
           </template>
 
           <template #platformAsset-cell="{ row }">
@@ -470,11 +571,11 @@ async function getExportRows() {
           </template>
 
           <template #mediaStatus-cell="{ row }">
-            <UBadge :label="cellAccount(row).mediaStatus" variant="subtle" color="success" size="xs" />
+            <UBadge :label="labelOf(MEDIA_STATUS_LABEL, cellAccount(row).mediaStatus)" variant="subtle" color="success" size="xs" />
           </template>
 
           <template #apiAccessStatus-cell="{ row }">
-            <span class="text-xs">{{ cellAccount(row).apiAccessStatus }}</span>
+            <span class="text-xs">{{ labelOf(API_ACCESS_STATUS_LABEL, cellAccount(row).apiAccessStatus) }}</span>
           </template>
 
           <template #receivedAt-cell="{ row }">
@@ -484,6 +585,7 @@ async function getExportRows() {
           <template #actions-cell="{ row }">
             <div class="flex items-center gap-1 flex-wrap">
               <UButton
+                v-if="canAllocateAccounts"
                 label="直接分配"
                 icon="i-lucide-user-plus"
                 color="info"
@@ -492,7 +594,8 @@ async function getExportRows() {
                 @click="openDirectAssign(cellAccount(row))"
               />
               <UButton
-                label="分配给 Demand"
+                v-if="canAllocateAccounts"
+                label="分配给需求"
                 icon="i-lucide-link"
                 color="primary"
                 variant="ghost"
@@ -530,7 +633,7 @@ async function getExportRows() {
           </template>
           <div class="space-y-4">
             <p class="text-xs text-muted rounded-lg bg-elevated p-3">
-              Allocation Source: DIRECT — 写入 Assignment，不创建 Demand。
+              分配来源：直接分配 — 写入团队/成员/户管/产品分配记录，不创建需求。
             </p>
             <div class="text-sm font-mono">
               {{ selectedAccount.externalAccountId }}
@@ -544,7 +647,7 @@ async function getExportRows() {
                 placeholder="选择团队"
               />
             </UFormField>
-            <UFormField label="目标成员">
+            <UFormField label="目标成员" required>
               <USelectMenu
                 v-model="transferTargetMemberId"
                 :items="targetTeamMembers.map(m => ({ label: m.name, value: m.id }))"
@@ -552,6 +655,24 @@ async function getExportRows() {
                 label-key="label"
                 placeholder="选择成员"
                 :disabled="!transferTargetTeamId"
+              />
+            </UFormField>
+            <UFormField label="户管" required>
+              <USelectMenu
+                v-model="assignManagerId"
+                :items="managerOptions"
+                value-key="value"
+                label-key="label"
+                placeholder="选择户管"
+              />
+            </UFormField>
+            <UFormField label="产品" required>
+              <USelectMenu
+                v-model="assignProductId"
+                :items="productOptions"
+                value-key="value"
+                label-key="label"
+                placeholder="选择产品"
               />
             </UFormField>
             <UFormField label="原因" required>
@@ -564,7 +685,7 @@ async function getExportRows() {
               <UButton
                 label="确认分配"
                 color="info"
-                :disabled="!transferTargetTeamId || !assignReason.trim()"
+                :disabled="!canConfirmDirectAssign"
                 @click="confirmDirectAssign"
               />
             </div>
@@ -577,26 +698,26 @@ async function getExportRows() {
       <template #content>
         <UCard v-if="selectedAccount">
           <template #header>
-            <span class="font-semibold">分配给 Demand</span>
+            <span class="font-semibold">分配给需求</span>
           </template>
           <div class="space-y-4">
             <p class="text-xs text-muted rounded-lg bg-elevated p-3">
-              Allocation Source: DEMAND — 写入 DemandAllocation + Assignment。也可在「需求调度」工作台操作。
+              分配来源：需求 — 写入需求分配与分配记录。也可在「需求调度」工作台操作。
             </p>
             <div class="text-sm font-mono">
               {{ selectedAccount.externalAccountId }} · {{ selectedAccount.media.name }}
             </div>
-            <UFormField label="Demand" required>
+            <UFormField label="需求" required>
               <USelectMenu
                 v-model="selectedDemandId"
-                :items="openDemands.map(d => ({ label: `${d.demandNo} (${d.status})`, value: d.id }))"
+                :items="openDemands.map(d => ({ label: `${d.demandNo}`, value: d.id }))"
                 value-key="value"
                 label-key="label"
                 placeholder="选择开放需求（已匹配媒体/时区）"
                 @update:model-value="selectedDemandItemId = undefined"
               />
             </UFormField>
-            <UFormField label="Demand Item" required>
+            <UFormField label="需求明细" required>
               <USelectMenu
                 v-model="selectedDemandItemId"
                 :items="selectedDemandItems.map(i => ({

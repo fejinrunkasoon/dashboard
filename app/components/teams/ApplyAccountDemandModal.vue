@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AccountDemandItem, DemandPriority, DemandRequirementFieldDef } from '~/domain'
+import type { AccountDemandItem, DemandPriority, DemandRequirementFieldDef, ProductOwnership } from '~/domain'
 import { getDemandRequirementFields } from '~/domain'
 import type { CreateAccountDemandInput } from '~/services'
 import { connectorService, demandService, mediaService, productService, teamService } from '~/services'
@@ -24,7 +24,8 @@ const team = await teamService.getTeamById(props.teamId)
 const members = await teamService.getMembers(props.teamId)
 
 const mediaId = ref<string | undefined>()
-const productId = ref<string | undefined>()
+/** Demand Product step: ownership only for now; maps to a stand-in productId on save. */
+const productOwnership = ref<ProductOwnership | undefined>()
 const quantity = ref(1)
 const expectedDate = ref('')
 const priority = ref<DemandPriority>('NORMAL')
@@ -34,17 +35,27 @@ const mediaOptions = ref<{ label: string, value: string }[]>([])
 const mediaSpecificFields = ref<DemandRequirementFieldDef[]>([])
 
 const priorityOptions = [
-  { label: 'LOW', value: 'LOW' },
-  { label: 'NORMAL', value: 'NORMAL' },
-  { label: 'HIGH', value: 'HIGH' },
-  { label: 'URGENT', value: 'URGENT' }
+  { label: '低', value: 'LOW' },
+  { label: '普通', value: 'NORMAL' },
+  { label: '高', value: 'HIGH' },
+  { label: '紧急', value: 'URGENT' }
 ]
 
 /** No empty-string option: Reka/USelectMenu treats "" as "no value" and blocks selection. */
-const productOptions = products.map(item => ({
-  label: item.ownershipType === 'EXTERNAL' ? `${item.name} · 外接` : `${item.name} · 自家`,
-  value: item.id
-}))
+const productOptions: { label: string, value: ProductOwnership }[] = [
+  { label: '自家', value: 'INTERNAL' },
+  { label: '外接', value: 'EXTERNAL' }
+]
+
+function productIdForOwnership(ownership: ProductOwnership | undefined): string | null {
+  if (!ownership) return null
+  return products.find(item => item.ownershipType === ownership)?.id ?? null
+}
+
+function ownershipForProductId(id: string | null | undefined): ProductOwnership | undefined {
+  if (!id) return undefined
+  return products.find(item => item.id === id)?.ownershipType
+}
 
 async function loadActiveMediaOptions() {
   const platforms = await mediaService.getMediaPlatforms({ status: 'ACTIVE' })
@@ -77,7 +88,7 @@ const requesterUserId = computed(() => {
 
 function resetForm() {
   mediaId.value = undefined
-  productId.value = undefined
+  productOwnership.value = undefined
   quantity.value = 1
   expectedDate.value = ''
   priority.value = 'NORMAL'
@@ -100,7 +111,7 @@ async function loadDraft(id: string) {
   if (item) {
     mediaId.value = item.mediaId
     await loadMediaSpecificFields(item.mediaId)
-    productId.value = item.productId ?? undefined
+    productOwnership.value = ownershipForProductId(item.productId)
     quantity.value = item.requestedQuantity
     const next: Record<string, string> = {}
     for (const [key, value] of Object.entries(item.requirements ?? {})) {
@@ -149,13 +160,14 @@ async function save(submit: boolean) {
   saving.value = true
   try {
     const reqs = buildRequirements()
+    const productId = productIdForOwnership(productOwnership.value)
     if (props.demandId) {
       await demandService.updateDraftDemand(props.demandId, {
         expectedDate: expectedDate.value || null,
         priority: priority.value,
         reason: reason.value || null,
         mediaId: mediaId.value,
-        productId: productId.value || null,
+        productId,
         requestedQuantity: quantity.value,
         requirements: reqs,
         submit
@@ -170,7 +182,7 @@ async function save(submit: boolean) {
         priority: priority.value,
         reason: reason.value || null,
         mediaId: mediaId.value!,
-        productId: productId.value || null,
+        productId,
         requestedQuantity: quantity.value,
         requirements: reqs,
         submit
@@ -211,7 +223,7 @@ async function save(submit: boolean) {
         </template>
 
         <div class="space-y-4">
-          <UFormField label="Media" required>
+          <UFormField label="媒体" required>
             <USelectMenu
               v-model="mediaId"
               :items="mediaOptions"
@@ -221,7 +233,7 @@ async function save(submit: boolean) {
             />
           </UFormField>
 
-          <UFormField label="Quantity" required>
+          <UFormField label="数量" required>
             <UInput
               v-model.number="quantity"
               type="number"
@@ -230,13 +242,13 @@ async function save(submit: boolean) {
             />
           </UFormField>
 
-          <UFormField label="Product" description="可选，可不选">
+          <UFormField label="产品" description="可选，先选自家 / 外接">
             <USelectMenu
-              v-model="productId"
+              v-model="productOwnership"
               :items="productOptions"
               value-key="value"
               label-key="label"
-              placeholder="选择产品"
+              placeholder="选择自家 / 外接"
               :clear="true"
             />
           </UFormField>
@@ -259,11 +271,11 @@ async function save(submit: boolean) {
             </UFormField>
           </template>
 
-          <UFormField label="Expected Date">
+          <UFormField label="期望日期">
             <UInput v-model="expectedDate" type="date" />
           </UFormField>
 
-          <UFormField label="Priority" required>
+          <UFormField label="优先级" required>
             <USelectMenu
               v-model="priority"
               :items="priorityOptions"
@@ -272,7 +284,7 @@ async function save(submit: boolean) {
             />
           </UFormField>
 
-          <UFormField label="Reason">
+          <UFormField label="申请原因">
             <UTextarea
               v-model="reason"
               placeholder="申请原因..."

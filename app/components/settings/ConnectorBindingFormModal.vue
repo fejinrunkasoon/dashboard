@@ -117,7 +117,7 @@ function onSubmit() {
               class="w-full"
             />
           </UFormField>
-          <UFormField label="Connector 实现" required>
+          <UFormField label="连接器实现" required>
             <USelectMenu
               v-model="implKey"
               :items="implOptions"
@@ -126,7 +126,7 @@ function onSubmit() {
               class="w-full"
             />
           </UFormField>
-          <UFormField label="Asset Types" required>
+          <UFormField label="资产类型" required>
             <div v-if="!mediaId" class="text-xs text-muted">请先选择媒体</div>
             <div v-else-if="!typeOptions.length" class="text-xs text-muted">
               该媒体下无 ACTIVE Asset Type，请先到数据字典创建。

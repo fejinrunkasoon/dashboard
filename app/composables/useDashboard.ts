@@ -1,11 +1,21 @@
 import { createSharedComposable } from '@vueuse/core'
 import type { Media, ProductType, AssetStatus } from '~/types'
+import { alertService } from '~/services'
 
 const _useDashboard = () => {
   const route = useRoute()
   const router = useRouter()
 
   const isNotificationsSlideoverOpen = ref(false)
+  const openAlertCount = ref(0)
+
+  async function refreshOpenAlertCount() {
+    try {
+      openAlertCount.value = await alertService.getOpenCount()
+    } catch {
+      openAlertCount.value = 0
+    }
+  }
 
   const globalFilter = reactive({
     media: null as Media | null,
@@ -35,10 +45,13 @@ const _useDashboard = () => {
 
   watch(() => route.fullPath, () => {
     isNotificationsSlideoverOpen.value = false
+    void refreshOpenAlertCount()
   })
 
   return {
     isNotificationsSlideoverOpen,
+    openAlertCount,
+    refreshOpenAlertCount,
     globalFilter,
     resetGlobalFilter
   }

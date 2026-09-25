@@ -80,6 +80,38 @@ export const appUsers: AppUser[] = [
     status: 'ACTIVE'
   },
   {
+    id: 'user-zhaolei',
+    memberId: 'mem-zhaolei',
+    organizationId: DEFAULT_ORGANIZATION_ID,
+    displayName: '赵磊',
+    roles: ['TEAM_MANAGER'],
+    status: 'ACTIVE'
+  },
+  {
+    id: 'user-chenming',
+    memberId: 'mem-chenming',
+    organizationId: DEFAULT_ORGANIZATION_ID,
+    displayName: '陈明',
+    roles: ['TEAM_MEMBER'],
+    status: 'ACTIVE'
+  },
+  {
+    id: 'user-sunhao',
+    memberId: 'mem-sunhao',
+    organizationId: DEFAULT_ORGANIZATION_ID,
+    displayName: '孙浩',
+    roles: ['TEAM_MANAGER'],
+    status: 'ACTIVE'
+  },
+  {
+    id: 'user-zhouxin',
+    memberId: 'mem-zhouxin',
+    organizationId: DEFAULT_ORGANIZATION_ID,
+    displayName: '周欣',
+    roles: ['TEAM_MEMBER'],
+    status: 'ACTIVE'
+  },
+  {
     id: 'user-admin',
     memberId: 'mem-wangwu',
     organizationId: DEFAULT_ORGANIZATION_ID,
@@ -907,7 +939,7 @@ export const demands: AccountDemand[] = [
     requesterUserId: 'mem-lisi',
     expectedDate: '2026-09-22',
     priority: 'NORMAL',
-    reason: '待负责人审批',
+    reason: '-',
     status: 'SUBMITTED',
     createdAt: '2026-09-15T00:00:00.000Z',
     updatedAt: '2026-09-15T00:00:00.000Z'

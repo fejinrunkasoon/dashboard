@@ -57,7 +57,11 @@ import type {
   TransferAccountResult
 } from './types'
 import { isInAccountPool } from './pool-eligibility'
-import { getAccessibleAccountIdsSync } from '../access/mock'
+import {
+  getAccessibleAccountIdsSync,
+  assertCanAllocateAccounts,
+  assertCanChangeAccountManager
+} from '../access/mock'
 
 function assertNotDisabled(accountId: string, accountAssetStatus: string) {
   if (accountAssetStatus === 'DISABLED') {
@@ -666,21 +670,30 @@ export const accountService: AccountService = {
   },
 
   async assignDirect(input: AssignDirectInput): Promise<AssignDirectResult> {
+    assertCanAllocateAccounts(input.actorUserId)
     if (!input.teamId) throw new Error('teamId is required')
     if (!input.accountIds?.length) throw new Error('accountIds is required')
+    if (!input.memberId) throw new Error('memberId is required')
+    if (!input.managerId) throw new Error('managerId is required')
+    if (!input.productId) throw new Error('productId is required')
     if (!teams.some(item => item.id === input.teamId)) {
       throw new Error(`Unknown team: ${input.teamId}`)
     }
-    if (input.memberId) {
-      const member = members.find(item => item.id === input.memberId)
-      if (!member || member.teamId !== input.teamId) {
-        throw new Error('memberId must belong to the target team')
-      }
+    const member = members.find(item => item.id === input.memberId)
+    if (!member || member.teamId !== input.teamId) {
+      throw new Error('memberId must belong to the target team')
+    }
+    if (!members.some(item => item.id === input.managerId)) {
+      throw new Error(`Unknown manager: ${input.managerId}`)
+    }
+    if (!products.some(item => item.id === input.productId)) {
+      throw new Error(`Unknown product: ${input.productId}`)
     }
 
     const uniqueIds = [...new Set(input.accountIds)]
     const assignmentIds: string[] = []
     const ts = writeTimestamp()
+    const reason = input.reason?.trim() || 'Direct assign from pool'
 
     for (const accountId of uniqueIds) {
       const account = accounts.find(item => item.id === accountId)
@@ -695,12 +708,45 @@ export const accountService: AccountService = {
         id: assignmentId,
         accountId,
         teamId: input.teamId,
-        memberId: input.memberId ?? null,
+        memberId: input.memberId,
         startedAt: ts,
         endedAt: null,
-        reason: input.reason?.trim() || 'Direct assign from pool',
+        reason,
         createdBy: input.createdBy
       })
+
+      const currentManager = currentOf(accountManagerAssignments, accountId)
+      if (currentManager && currentManager.managerMemberId !== input.managerId) {
+        currentManager.endedAt = ts
+      }
+      if (!currentManager || currentManager.managerMemberId !== input.managerId) {
+        accountManagerAssignments.push({
+          id: `ama-${accountId}-${accountManagerAssignments.length + 1}`,
+          accountId,
+          managerMemberId: input.managerId,
+          startedAt: ts,
+          endedAt: null,
+          reason: `Direct assign manager`,
+          createdBy: input.createdBy
+        })
+      }
+
+      const currentProduct = currentOf(accountProductAssignments, accountId)
+      if (currentProduct && currentProduct.productId !== input.productId) {
+        currentProduct.endedAt = ts
+      }
+      if (!currentProduct || currentProduct.productId !== input.productId) {
+        accountProductAssignments.push({
+          id: `apa-${accountId}-${accountProductAssignments.length + 1}`,
+          accountId,
+          productId: input.productId,
+          startedAt: ts,
+          endedAt: null,
+          reason: `Direct assign product`,
+          createdBy: input.createdBy
+        })
+      }
+
       account.assetStatus = 'ASSIGNED'
       account.updatedAt = ts
       assignmentIds.push(assignmentId)
@@ -833,6 +879,7 @@ export const accountService: AccountService = {
   },
 
   async changeManager(input: ChangeManagerInput): Promise<ChangeManagerResult> {
+    assertCanChangeAccountManager(input.actorUserId)
     if (!input.accountId) throw new Error('accountId is required')
     if (!input.managerMemberId) throw new Error('managerMemberId is required')
     if (!members.some(item => item.id === input.managerMemberId)) {

@@ -17,9 +17,9 @@ const draftUsage = ref('all')
 
 const statusOptions = [
   { label: '全部状态', value: 'all' },
-  { label: 'ACTIVE', value: 'ACTIVE' },
-  { label: 'DISABLED', value: 'DISABLED' },
-  { label: 'ARCHIVED', value: 'ARCHIVED' }
+  { label: '启用', value: 'ACTIVE' },
+  { label: '停用', value: 'DISABLED' },
+  { label: '归档', value: 'ARCHIVED' }
 ]
 
 const idleOptions = [
@@ -149,24 +149,20 @@ const summary = computed(() => rows.value.reduce((acc, item) => {
   return acc
 }, { accounts: 0, idle: 0, unfulfilled: 0 }))
 
-function openTeam(id: string) {
-  void navigateTo(`/teams/${id}`)
-}
-
 const exportColumns = [
-  { key: 'code', header: 'Code' },
-  { key: 'name', header: 'Team' },
-  { key: 'status', header: 'Status' },
-  { key: 'leader', header: 'Leader' },
-  { key: 'memberCount', header: 'Members' },
-  { key: 'accounts', header: 'Accounts' },
-  { key: 'inUse', header: 'In Use' },
-  { key: 'idle', header: 'Idle' },
-  { key: 'usageRate', header: 'Usage Rate' },
-  { key: 'todaySpend', header: 'Today Spend' },
-  { key: 'spend7d', header: '7D Spend' },
-  { key: 'banRate', header: 'Ban Rate' },
-  { key: 'unfulfilledDemand', header: 'Unfulfilled Demand' }
+  { key: 'code', header: '编码' },
+  { key: 'name', header: '团队' },
+  { key: 'status', header: '状态' },
+  { key: 'leader', header: '负责人' },
+  { key: 'memberCount', header: '成员' },
+  { key: 'accounts', header: '账户' },
+  { key: 'inUse', header: '使用中' },
+  { key: 'idle', header: '闲置' },
+  { key: 'usageRate', header: '使用率' },
+  { key: 'todaySpend', header: '今日消耗' },
+  { key: 'spend7d', header: '7日消耗' },
+  { key: 'banRate', header: '封禁率' },
+  { key: 'unfulfilledDemand', header: '未满足需求' }
 ]
 
 async function getExportRows() {
@@ -210,19 +206,19 @@ function usageColor(rate: number): 'success' | 'warning' | 'error' {
 }
 
 const columns: TableColumn<TeamListItem>[] = [
-  { accessorKey: 'name', header: 'Team' },
-  { id: 'leader', header: 'Leader' },
-  { accessorKey: 'memberCount', header: 'Members' },
-  { accessorKey: 'accounts', header: 'Accounts' },
-  { accessorKey: 'inUse', header: 'In Use' },
-  { accessorKey: 'idle', header: 'Idle' },
-  { id: 'usageRate', header: 'Usage Rate' },
-  { id: 'todaySpend', header: 'Today Spend' },
-  { id: 'spend7d', header: '7D Spend' },
-  { id: 'internalSpend7d', header: 'Internal' },
-  { id: 'externalSpend7d', header: 'External' },
-  { id: 'banRate', header: 'Ban Rate' },
-  { id: 'unfulfilledDemand', header: 'Unfulfilled Demand' }
+  { accessorKey: 'name', header: '团队' },
+  { id: 'leader', header: '负责人' },
+  { accessorKey: 'memberCount', header: '成员' },
+  { accessorKey: 'accounts', header: '账户' },
+  { accessorKey: 'inUse', header: '使用中' },
+  { accessorKey: 'idle', header: '闲置' },
+  { id: 'usageRate', header: '使用率' },
+  { id: 'todaySpend', header: '今日消耗' },
+  { id: 'spend7d', header: '7日消耗' },
+  { id: 'internalSpend7d', header: '内部' },
+  { id: 'externalSpend7d', header: '外部' },
+  { id: 'banRate', header: '封禁率' },
+  { id: 'unfulfilledDemand', header: '未满足需求' }
 ]
 
 function cell(row: Row<TeamListItem>): TeamListItem {
@@ -302,14 +298,13 @@ function cell(row: Row<TeamListItem>): TeamListItem {
           <UTable :data="pagedRows" :columns="columns" class="shrink-0">
             <template #name-cell="{ row }">
               <div class="min-w-0">
-                <UButton
-                  :label="cell(row).name"
-                  variant="ghost"
-                  color="neutral"
-                  class="font-medium -px-2 -py-1"
-                  @click="openTeam(cell(row).id)"
-                />
-                <p class="text-xs text-muted font-mono ps-2">
+                <NuxtLink
+                  :to="`/teams/${cell(row).id}`"
+                  class="font-medium text-highlighted hover:text-primary hover:underline transition-colors"
+                >
+                  {{ cell(row).name }}
+                </NuxtLink>
+                <p class="text-xs text-muted font-mono">
                   {{ cell(row).code }}
                 </p>
               </div>

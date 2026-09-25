@@ -114,7 +114,7 @@ async function submitReply() {
     emit('updated', result.order)
     if (result.validation.ok) {
       toast.add({
-        title: 'Reply 已解析',
+        title: '回复已解析',
         description: `草稿 ${result.draft?.accountIds.length ?? 0} 户 · 置信度 ${Math.round((result.draft?.confidence ?? 0) * 100)}%`,
         icon: 'i-lucide-check',
         color: 'success'
@@ -129,7 +129,7 @@ async function submitReply() {
     }
   } catch (error) {
     toast.add({
-      title: 'Reply 提交失败',
+      title: '回复提交失败',
       description: error instanceof Error ? error.message : '未知错误',
       color: 'error',
       icon: 'i-lucide-alert-circle'
@@ -204,12 +204,12 @@ async function confirmDraft() {
       :rows="8"
       :disabled="!canReply"
       class="font-mono text-xs"
-      placeholder="供应商 Reply 原文…"
+      placeholder="供应商回复原文…"
     />
 
     <div class="flex flex-wrap gap-1.5">
       <UButton
-        label="提交 Reply → Parser"
+        label="提交回复 → 解析"
         size="xs"
         color="primary"
         variant="soft"

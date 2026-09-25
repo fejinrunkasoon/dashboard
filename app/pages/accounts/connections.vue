@@ -56,13 +56,24 @@ const wizardPlatformName = computed(() => {
   return connectable.value.find(c => c.mediaId === wizardPlatformId.value)?.name ?? '平台'
 })
 
+const { isOrgAdmin, isPlatformAdmin } = useCurrentUser()
+const canConfigureApps = computed(() => isOrgAdmin.value || isPlatformAdmin.value)
+
 function openWizard(platformId: string) {
   const info = connectable.value.find(c => c.mediaId === platformId)
   if (!info?.appConfigured || !info.platformEnabled) {
     toast.add({
       title: '无法连接',
-      description: '请先由管理员在「媒体平台开通」配置 App ID/Secret 并启用媒体。',
-      color: 'warning'
+      description: canConfigureApps.value
+        ? '请先在「媒体平台开通」配置 App ID/Secret 并启用媒体。'
+        : '请先由管理员在「媒体平台开通」配置 App ID/Secret 并启用媒体。',
+      color: 'warning',
+      actions: [{
+        label: '去开通',
+        color: 'neutral' as const,
+        variant: 'outline' as const,
+        to: '/settings'
+      }]
     })
     return
   }
